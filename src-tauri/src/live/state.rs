@@ -1,13 +1,11 @@
-use crate::database::{
-    CachedEntity, CachedPlayerData, EncounterMetadata, PlayerNameEntry, flush_entity_cache,
-    flush_playerdata, now_ms, save_encounter,
-};
+use crate::database::{EncounterMetadata, PlayerNameEntry, now_ms, save_encounter};
 use crate::live::cd_calc::calculate_skill_cd;
 use crate::live::commands_models::{
     BuffUpdatePayload, BuffUpdateState, FightResourceState, FightResourceUpdatePayload,
     PanelAttrState, PanelAttrUpdatePayload, SkillCdState, SkillCdUpdatePayload,
 };
 use crate::live::dungeon_log::{BattleStateMachine, EncounterResetReason};
+use crate::live::entity_attr_store::EntityAttrStore;
 use crate::live::event_manager::EventManager;
 use crate::live::opcodes_models::Encounter;
 use blueprotobuf_lib::blueprotobuf;
@@ -17,7 +15,7 @@ use blueprotobuf_lib::blueprotobuf::{
 use log::{info, trace, warn};
 use prost::Message;
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
@@ -59,28 +57,6 @@ fn safe_emit<S: Serialize + Clone>(app_handle: &AppHandle, event: &str, payload:
             false
         }
     }
-}
-
-/// Returns true only for damage entries that are meaningful for encounter segmentation.
-/// restricts trigger to player attackers.
-fn is_valid_player_damage(dmg: &blueprotobuf::SyncDamageInfo) -> bool {
-    use blueprotobuf_lib::blueprotobuf::{EDamageType, EEntityType};
-
-    if dmg.r#type.unwrap_or(0) == EDamageType::Heal as i32 {
-        return false;
-    }
-    if dmg.value.is_none() && dmg.lucky_value.is_none() {
-        return false;
-    }
-    let attacker_uuid = match dmg.top_summoner_id.or(dmg.attacker_uuid) {
-        Some(uuid) => uuid,
-        None => return false,
-    };
-    if dmg.owner_id.is_none() {
-        return false;
-    }
-
-    EEntityType::from(attacker_uuid) == EEntityType::EntChar
 }
 
 /// Represents the possible events that can be handled by the state manager.
@@ -133,8 +109,6 @@ pub struct AppState {
     pub monitored_buff_ids: Vec<i32>,
     /// Ordered list of monitored panel attribute IDs.
     pub monitored_panel_attr_ids: Vec<i32>,
-    /// Latest panel attribute values keyed by Attr id (from base attrs).
-    pub panel_attr_values: HashMap<i32, i32>,
     /// User configured buff priority order by base ID.
     pub priority_buff_ids: Vec<i32>,
     /// Active buffs keyed by buff UUID.
@@ -155,23 +129,13 @@ pub struct AppState {
     pub event_update_rate_ms: u64,
     /// Current fight resource state.
     pub fight_res_state: Option<FightResourceState>,
-    /// TempAttr values keyed by TempAttr id.
-    pub temp_attr_values: HashMap<i32, i32>,
-    /// AttrSkillCD (11750) fixed cooldown reduction.
-    pub attr_skill_cd: i32,
-    /// AttrSkillCDPCT (11760) cooldown percentage reduction in per-10k units.
-    pub attr_skill_cd_pct: i32,
-    /// AttrCdAcceleratePct (11960) skill acceleration in per-10k units.
-    pub attr_cd_accelerate_pct: i32,
+    /// Centralized store for all parsed Attr / TempAttr values.
+    pub attr_store: EntityAttrStore,
     /// Estimated offset: local_ms - server_ms. Used to convert server buff
     /// timestamps into local time domain for clock-skew-safe rendering.
     pub server_clock_offset: i64,
     /// Monitor All buff?
     pub monitor_all_buff: bool,
-    /// In-memory entity cache (single-threaded in live loop).
-    pub entity_cache: HashMap<i64, CachedEntity>,
-    /// Latest captured detailed player data.
-    pub playerdata_cache: Option<CachedPlayerData>,
     /// battle state machine for objective/state driven resets.
     pub battle_state: BattleStateMachine,
     /// If set, automatic reset can execute only after this timestamp.
@@ -225,7 +189,6 @@ impl AppState {
             monitored_skill_ids: Vec::new(),
             monitored_buff_ids: Vec::new(),
             monitored_panel_attr_ids: Vec::new(),
-            panel_attr_values: HashMap::new(),
             priority_buff_ids: Vec::new(),
             monitor_all_buff: false,
             active_buffs: HashMap::new(),
@@ -237,13 +200,8 @@ impl AppState {
             initial_scene_change_handled: false,
             event_update_rate_ms: 200,
             fight_res_state: None,
-            temp_attr_values: HashMap::new(),
-            attr_skill_cd: 0,
-            attr_skill_cd_pct: 0,
-            attr_cd_accelerate_pct: 0,
+            attr_store: EntityAttrStore::with_capacity(256),
             server_clock_offset: 0,
-            entity_cache: crate::database::load_initial_entity_cache(),
-            playerdata_cache: None,
             battle_state: BattleStateMachine::default(),
             pending_auto_reset: None,
         }
@@ -264,53 +222,19 @@ impl AppState {
         self.event_manager.emit_encounter_pause(paused);
     }
 
-    fn collect_dirty_entity_cache(&mut self) -> Vec<CachedEntity> {
-        let mut dirty_entries = Vec::new();
-        for entry in self.entity_cache.values_mut() {
-            if entry.dirty {
-                entry.dirty = false;
-                dirty_entries.push(entry.clone());
-            }
-        }
-        dirty_entries
-    }
-
-    fn take_dirty_playerdata(&mut self) -> Option<CachedPlayerData> {
-        let mut cloned = self.playerdata_cache.clone()?;
-        if !cloned.dirty {
-            return None;
-        }
-        cloned.dirty = false;
-        if let Some(existing) = self.playerdata_cache.as_mut() {
-            existing.dirty = false;
-        }
-        Some(cloned)
-    }
-}
-
-fn decode_single_attr_i32(attr: &blueprotobuf::Attr) -> Option<i32> {
-    match attr.raw_data.as_ref() {
-        None => Some(0),
-        Some(raw) if raw.is_empty() => Some(0),
-        Some(raw) => {
-            let mut buf = raw.as_slice();
-            prost::encoding::decode_varint(&mut buf)
-                .ok()
-                .and_then(|v| i32::try_from(v).ok())
-        }
-    }
 }
 
 fn recalculate_cached_skill_cds(state: &mut AppState) {
+    let (attr_skill_cd, attr_skill_cd_pct, attr_cd_accelerate_pct) = state.attr_store.cd_inputs();
     for cd in state.skill_cd_map.values_mut() {
         if cd.duration > 0 {
             let (calculated_duration, cd_accelerate_rate) = calculate_skill_cd(
                 cd.duration as f32,
                 cd.skill_level_id,
-                &state.temp_attr_values,
-                state.attr_skill_cd as f32,
-                state.attr_skill_cd_pct as f32,
-                state.attr_cd_accelerate_pct as f32,
+                state.attr_store.temp_attrs(),
+                attr_skill_cd,
+                attr_skill_cd_pct,
+                attr_cd_accelerate_pct,
             );
             cd.calculated_duration = calculated_duration.round() as i32;
             cd.cd_accelerate_rate = cd_accelerate_rate;
@@ -368,6 +292,12 @@ fn emit_panel_attr_update_if_needed(state: &AppState, payload: Vec<PanelAttrStat
             "panel-attr-update",
             PanelAttrUpdatePayload { attrs: payload },
         );
+    }
+}
+
+fn hydrate_entities_from_attr_store(state: &mut AppState) {
+    for (&uid, entity) in &mut state.encounter.entity_uid_to_entity {
+        state.attr_store.hydrate_entity(uid, entity);
     }
 }
 
@@ -553,6 +483,7 @@ impl AppStateManager {
                 self.reset_encounter(state, is_manual).await;
             }
         }
+        self.apply_attr_store_changes(state);
     }
 
     async fn apply_control_command(&self, state: &mut AppState, command: LiveControlCommand) {
@@ -576,10 +507,13 @@ impl AppStateManager {
                     .monitored_panel_attr_ids
                     .iter()
                     .filter_map(|attr_id| {
-                        state.panel_attr_values.get(attr_id).map(|value| PanelAttrState {
-                            attr_id: *attr_id,
-                            value: *value,
-                        })
+                        state
+                            .attr_store
+                            .panel_attr_value(*attr_id)
+                            .map(|value| PanelAttrState {
+                                attr_id: *attr_id,
+                                value,
+                            })
                     })
                     .collect();
                 emit_panel_attr_update_if_needed(state, payload);
@@ -615,19 +549,20 @@ impl AppStateManager {
         state.pending_auto_reset = None;
 
         // Persist encounter directly on server change.
+        hydrate_entities_from_attr_store(state);
         let defeated = state.event_manager.take_dead_bosses();
         let mut player_names: Vec<PlayerNameEntry> = state
             .encounter
             .entity_uid_to_entity
-            .values()
-            .filter(|e| {
-                e.entity_type == EEntityType::EntChar
-                    && !e.name.is_empty()
-                    && (e.damage.hits > 0 || e.healing.hits > 0 || e.taken.hits > 0)
+            .iter()
+            .filter(|(_, entity)| {
+                entity.entity_type == EEntityType::EntChar
+                    && !entity.name.is_empty()
+                    && (entity.damage.hits > 0 || entity.healing.hits > 0 || entity.taken.hits > 0)
             })
-            .map(|e| PlayerNameEntry {
-                name: e.name.clone(),
-                class_id: e.class_id,
+            .map(|(_, entity)| PlayerNameEntry {
+                name: entity.name.clone(),
+                class_id: entity.class_id,
             })
             .collect();
         player_names.sort_by(|a, b| a.name.cmp(&b.name));
@@ -663,13 +598,6 @@ impl AppStateManager {
                 metadata.boss_names.len()
             );
             save_encounter(&state.encounter, &metadata);
-            let dirty_entities = state.collect_dirty_entity_cache();
-            if !dirty_entities.is_empty() {
-                flush_entity_cache(dirty_entities);
-            }
-            if let Some(playerdata) = state.take_dirty_playerdata() {
-                flush_playerdata(playerdata);
-            }
         } else {
             warn!(
                 target: "app::live",
@@ -698,6 +626,7 @@ impl AppStateManager {
         state: &mut AppState,
         enter_scene: blueprotobuf::EnterScene,
     ) {
+        use crate::live::opcodes_process::apply_panel_attrs;
         use crate::live::scene_names;
 
         info!("EnterScene packet received");
@@ -705,23 +634,7 @@ impl AppStateManager {
         if let Some(info) = enter_scene.enter_scene_info.as_ref() {
             if let Some(player_ent) = info.player_ent.as_ref() {
                 if let Some(attrs) = player_ent.attrs.as_ref() {
-                    let mut changed_panel_attrs: Vec<PanelAttrState> = Vec::new();
-                    for attr in &attrs.attrs {
-                        let Some(attr_id) = attr.id else {
-                            continue;
-                        };
-                        if !state.monitored_panel_attr_ids.contains(&attr_id) {
-                            continue;
-                        }
-                        let Some(value) = decode_single_attr_i32(attr) else {
-                            continue;
-                        };
-                        let prev = state.panel_attr_values.insert(attr_id, value);
-                        if prev != Some(value) {
-                            changed_panel_attrs.push(PanelAttrState { attr_id, value });
-                        }
-                    }
-                    emit_panel_attr_update_if_needed(state, changed_panel_attrs);
+                    apply_panel_attrs(&mut state.attr_store, attrs, &state.monitored_panel_attr_ids);
                 }
             }
         }
@@ -864,7 +777,7 @@ impl AppStateManager {
         use crate::live::opcodes_process::process_sync_near_entities;
         if process_sync_near_entities(
             &mut state.encounter,
-            &mut state.entity_cache,
+            &mut state.attr_store,
             sync_near_entities,
         )
         .is_none()
@@ -882,17 +795,12 @@ impl AppStateManager {
 
         if process_sync_container_data(
             &mut state.encounter,
-            &mut state.entity_cache,
-            &mut state.playerdata_cache,
+            &mut state.attr_store,
             sync_container_data,
         )
         .is_none()
         {
             warn!("Error processing SyncContainerData.. ignoring.");
-        }
-
-        if let Some(playerdata) = state.take_dirty_playerdata() {
-            flush_playerdata(playerdata);
         }
     }
 
@@ -1000,25 +908,29 @@ impl AppStateManager {
         state: &mut AppState,
         sync_to_me_delta_info: blueprotobuf::SyncToMeDeltaInfo,
     ) {
-        use crate::live::opcodes_models::attr_type::{
-            ATTR_CD_ACCELERATE_PCT, ATTR_FIGHT_RESOURCES, ATTR_SKILL_CD, ATTR_SKILL_CD_PCT,
+        use crate::live::opcodes_process::{
+            aoi_delta_has_player_damage, process_sync_to_me_delta_info,
         };
-        use crate::live::opcodes_process::{parse_fight_resources, process_sync_to_me_delta_info};
+        if state.pending_auto_reset.is_some() {
+            let has_damage = sync_to_me_delta_info
+                .delta_info
+                .as_ref()
+                .and_then(|d| d.base_delta.as_ref())
+                .is_some_and(aoi_delta_has_player_damage);
+            self.try_deferred_reset(state, has_damage, "SyncToMeDeltaInfo")
+                .await;
+        }
 
-        let skill_cds = sync_to_me_delta_info
-            .delta_info
-            .as_ref()
-            .map(|d| d.sync_skill_c_ds.clone())
-            .unwrap_or_default();
-        let buff_effect_bytes = sync_to_me_delta_info
-            .delta_info
-            .as_ref()
-            .and_then(|d| d.base_delta.as_ref())
-            .and_then(|d| d.buff_effect.as_ref())
-            .cloned();
+        let result = process_sync_to_me_delta_info(
+            &mut state.encounter,
+            &mut state.attr_store,
+            sync_to_me_delta_info,
+            &state.monitored_panel_attr_ids,
+        );
 
-        if !skill_cds.is_empty() {
-            let ids: Vec<i32> = skill_cds
+        if !result.skill_cds.is_empty() {
+            let ids: Vec<i32> = result
+                .skill_cds
                 .iter()
                 .filter_map(|cd| cd.skill_level_id)
                 .collect();
@@ -1029,29 +941,10 @@ impl AppStateManager {
             );
         }
 
-        // Check for fight resources
-        let fight_res_values = if let Some(ref delta) = sync_to_me_delta_info.delta_info {
-            if let Some(ref base) = delta.base_delta {
-                if let Some(ref col) = base.attrs {
-                    col.attrs
-                        .iter()
-                        .find(|a| a.id == Some(ATTR_FIGHT_RESOURCES))
-                        .and_then(|a| a.raw_data.as_ref())
-                        .and_then(|raw| parse_fight_resources(raw))
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        if let Some(values) = fight_res_values {
+        if let Some(values) = result.fight_resources {
             let now = crate::database::now_ms();
             let new_state = FightResourceState {
-                values: values.clone(),
+                values,
                 received_at: now,
             };
             state.fight_res_state = Some(new_state.clone());
@@ -1067,119 +960,7 @@ impl AppStateManager {
             }
         }
 
-        let mut should_recalculate = false;
-        if let Some(delta) = sync_to_me_delta_info.delta_info.as_ref() {
-            if let Some(base) = delta.base_delta.as_ref() {
-                if let Some(col) = base.attrs.as_ref() {
-                    let mut changed_panel_attrs: Vec<PanelAttrState> = Vec::new();
-                    let monitored_panel_attr_ids: HashSet<i32> = state
-                        .monitored_panel_attr_ids
-                        .iter()
-                        .copied()
-                        .collect();
-                    for attr in &col.attrs {
-                        let Some(attr_id) = attr.id else {
-                            continue;
-                        };
-                        let is_cd_attr = matches!(
-                            attr_id,
-                            ATTR_SKILL_CD | ATTR_SKILL_CD_PCT | ATTR_CD_ACCELERATE_PCT
-                        );
-                        let is_monitored_panel_attr = monitored_panel_attr_ids.contains(&attr_id);
-                        if !is_cd_attr && !is_monitored_panel_attr {
-                            continue;
-                        }
-
-                        let Some(value) = decode_single_attr_i32(attr) else {
-                            continue;
-                        };
-
-                        match attr_id {
-                            ATTR_SKILL_CD => {
-                                if value != state.attr_skill_cd {
-                                    state.attr_skill_cd = value;
-                                    should_recalculate = true;
-                                }
-                            }
-                            ATTR_SKILL_CD_PCT => {
-                                if value != state.attr_skill_cd_pct {
-                                    state.attr_skill_cd_pct = value;
-                                    should_recalculate = true;
-                                }
-                            }
-                            ATTR_CD_ACCELERATE_PCT => {
-                                if value != state.attr_cd_accelerate_pct {
-                                    state.attr_cd_accelerate_pct = value;
-                                    should_recalculate = true;
-                                }
-                            }
-                            _ => {}
-                        }
-
-                        if is_monitored_panel_attr {
-                            let prev = state.panel_attr_values.insert(attr_id, value);
-                            if prev != Some(value) {
-                                changed_panel_attrs.push(PanelAttrState { attr_id, value });
-                            }
-                        }
-                    }
-                    emit_panel_attr_update_if_needed(state, changed_panel_attrs);
-                }
-
-                if let Some(temp_attr_collection) = base.temp_attrs.as_ref() {
-                    for temp_attr in &temp_attr_collection.attrs {
-                        let Some(id) = temp_attr.id else {
-                            continue;
-                        };
-                        let value = temp_attr.value.unwrap_or(0);
-                        let prev = state.temp_attr_values.insert(id, value);
-                        if prev != Some(value) {
-                            should_recalculate = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        if state
-            .pending_auto_reset
-            .is_some_and(|trigger_at| Instant::now() >= trigger_at)
-        {
-            let has_damage = sync_to_me_delta_info
-                .delta_info
-                .as_ref()
-                .and_then(|d| d.base_delta.as_ref())
-                .and_then(|b| b.skill_effects.as_ref())
-                .is_some_and(|effects| {
-                    effects.damages.iter().any(is_valid_player_damage)
-                });
-
-            if has_damage {
-                if state.encounter.total_dmg > 0 {
-                    info!(
-                        target: "app::live",
-                        "Deferred reset executing: damage in SyncToMeDeltaInfo"
-                    );
-                    self.reset_encounter(state, false).await;
-                } else {
-                    info!(
-                        target: "app::live",
-                        "Deferred reset skipped: zero total_dmg in SyncToMeDeltaInfo (total_heal={})",
-                        state.encounter.total_heal
-                    );
-                }
-                state.pending_auto_reset = None;
-            }
-        }
-
-        // Missing fields are normal, no need to log
-        let _ = process_sync_to_me_delta_info(
-            &mut state.encounter,
-            &mut state.entity_cache,
-            sync_to_me_delta_info,
-        );
-
-        if let Some(raw_bytes) = buff_effect_bytes {
+        if let Some(raw_bytes) = result.buff_effect_bytes {
             if let Some(payload) = process_buff_effect_bytes(
                 &mut state.active_buffs,
                 &raw_bytes,
@@ -1200,22 +981,25 @@ impl AppStateManager {
             }
         }
 
-        if !skill_cds.is_empty() {
+        if !result.skill_cds.is_empty() {
+            state.attr_store.mark_cd_dirty();
             let now = crate::database::now_ms();
-            for cd in &skill_cds {
+            for cd in &result.skill_cds {
                 if let Some(id) = cd.skill_level_id {
                     if !state.monitored_skill_ids.contains(&(id / 100)) {
                         continue;
                     }
                     let duration = cd.duration.unwrap_or(0);
+                    let (attr_skill_cd, attr_skill_cd_pct, attr_cd_accelerate_pct) =
+                        state.attr_store.cd_inputs();
                     let (calculated_duration, cd_accelerate_rate) = if duration > 0 {
                         calculate_skill_cd(
                             duration as f32,
                             id,
-                            &state.temp_attr_values,
-                            state.attr_skill_cd as f32,
-                            state.attr_skill_cd_pct as f32,
-                            state.attr_cd_accelerate_pct as f32,
+                            state.attr_store.temp_attrs(),
+                            attr_skill_cd,
+                            attr_skill_cd_pct,
+                            attr_cd_accelerate_pct,
                         )
                     } else {
                         (duration as f32, 0.0)
@@ -1236,15 +1020,6 @@ impl AppStateManager {
                 }
             }
         }
-
-        if should_recalculate {
-            recalculate_cached_skill_cds(state);
-        }
-
-        if !skill_cds.is_empty() || should_recalculate {
-            let filtered = build_filtered_skill_cds(state);
-            emit_skill_cd_update_if_needed(state, filtered);
-        }
     }
 
     async fn process_sync_near_delta_info(
@@ -1252,43 +1027,53 @@ impl AppStateManager {
         state: &mut AppState,
         sync_near_delta_info: blueprotobuf::SyncNearDeltaInfo,
     ) {
-        use crate::live::opcodes_process::process_aoi_sync_delta;
-        if state
-            .pending_auto_reset
-            .is_some_and(|trigger_at| Instant::now() >= trigger_at)
-        {
-            let has_damage = sync_near_delta_info.delta_infos.iter().any(|d| {
-                d.skill_effects.as_ref().is_some_and(|effects| {
-                    effects.damages.iter().any(is_valid_player_damage)
-                })
-            });
-
-            if has_damage {
-                if state.encounter.total_dmg > 0 {
-                    info!(
-                        target: "app::live",
-                        "Deferred reset executing: damage in SyncNearDeltaInfo"
-                    );
-                    self.reset_encounter(state, false).await;
-                } else {
-                    info!(
-                        target: "app::live",
-                        "Deferred reset skipped: zero total_dmg in SyncNearDeltaInfo (total_heal={})",
-                        state.encounter.total_heal
-                    );
-                }
-                state.pending_auto_reset = None;
-            }
+        use crate::live::opcodes_process::{aoi_delta_has_player_damage, process_aoi_sync_delta};
+        if state.pending_auto_reset.is_some() {
+            let has_damage = sync_near_delta_info
+                .delta_infos
+                .iter()
+                .any(aoi_delta_has_player_damage);
+            self.try_deferred_reset(state, has_damage, "SyncNearDeltaInfo")
+                .await;
         }
 
         for aoi_sync_delta in sync_near_delta_info.delta_infos {
             // Missing fields are normal, no need to log
             let _ = process_aoi_sync_delta(
                 &mut state.encounter,
-                &mut state.entity_cache,
+                &mut state.attr_store,
                 aoi_sync_delta,
             );
         }
+    }
+
+    async fn try_deferred_reset(&self, state: &mut AppState, has_damage: bool, source: &str) {
+        if !state
+            .pending_auto_reset
+            .is_some_and(|trigger_at| Instant::now() >= trigger_at)
+        {
+            return;
+        }
+        if !has_damage {
+            return;
+        }
+
+        if state.encounter.total_dmg > 0 {
+            info!(
+                target: "app::live",
+                "Deferred reset executing: damage in {}",
+                source
+            );
+            self.reset_encounter(state, false).await;
+        } else {
+            info!(
+                target: "app::live",
+                "Deferred reset skipped: zero total_dmg in {} (total_heal={})",
+                source,
+                state.encounter.total_heal
+            );
+        }
+        state.pending_auto_reset = None;
     }
 
     async fn process_notify_revive_user(
@@ -1332,6 +1117,20 @@ impl AppStateManager {
         }
     }
 
+    fn apply_attr_store_changes(&self, state: &mut AppState) {
+        let changes = state.attr_store.drain_changes();
+
+        if !changes.panel_dirty_attrs.is_empty() {
+            emit_panel_attr_update_if_needed(state, changes.panel_dirty_attrs);
+        }
+
+        if changes.cd_dirty {
+            recalculate_cached_skill_cds(state);
+            let filtered = build_filtered_skill_cds(state);
+            emit_skill_cd_update_if_needed(state, filtered);
+        }
+    }
+
     async fn apply_battle_state_resets_if_needed(&self, state: &mut AppState) {
         if let Some(reason) = state.battle_state.check_deferred_calls() {
             self.apply_reset_reason(state, reason).await;
@@ -1346,19 +1145,20 @@ impl AppStateManager {
 
     async fn reset_encounter(&self, state: &mut AppState, is_manual: bool) {
         // Persist encounter directly on reset.
+        hydrate_entities_from_attr_store(state);
         let defeated = state.event_manager.take_dead_bosses();
         let mut player_names: Vec<PlayerNameEntry> = state
             .encounter
             .entity_uid_to_entity
-            .values()
-            .filter(|e| {
-                e.entity_type == EEntityType::EntChar
-                    && !e.name.is_empty()
-                    && (e.damage.hits > 0 || e.healing.hits > 0 || e.taken.hits > 0)
+            .iter()
+            .filter(|(_, entity)| {
+                entity.entity_type == EEntityType::EntChar
+                    && !entity.name.is_empty()
+                    && (entity.damage.hits > 0 || entity.healing.hits > 0 || entity.taken.hits > 0)
             })
-            .map(|e| PlayerNameEntry {
-                name: e.name.clone(),
-                class_id: e.class_id,
+            .map(|(_, entity)| PlayerNameEntry {
+                name: entity.name.clone(),
+                class_id: entity.class_id,
             })
             .collect();
         player_names.sort_by(|a, b| a.name.cmp(&b.name));
@@ -1395,13 +1195,6 @@ impl AppStateManager {
                 metadata.is_manually_reset
             );
             save_encounter(&state.encounter, &metadata);
-            let dirty_entities = state.collect_dirty_entity_cache();
-            if !dirty_entities.is_empty() {
-                flush_entity_cache(dirty_entities);
-            }
-            if let Some(playerdata) = state.take_dirty_playerdata() {
-                flush_playerdata(playerdata);
-            }
         } else {
             warn!(
                 target: "app::live",
@@ -1692,7 +1485,10 @@ impl AppStateManager {
             return;
         }
 
-        let mut payload = crate::live::event_manager::generate_live_data_payload(&state.encounter);
+        let mut payload = crate::live::event_manager::generate_live_data_payload(
+            &state.encounter,
+            &state.attr_store,
+        );
 
         let mut boss_deaths: Vec<(i64, String)> = Vec::new();
         let current_time_ms = now_ms() as u128;

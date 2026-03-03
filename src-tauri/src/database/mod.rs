@@ -21,7 +21,6 @@ pub const MIGRATIONS: EmbeddedMigrations = diesel_migrations::embed_migrations!(
 type DbTask = Box<dyn FnOnce(&mut SqliteConnection) + Send + 'static>;
 
 static DB_SENDER: OnceLock<mpsc::Sender<DbTask>> = OnceLock::new();
-static PRELOADED_ENTITY_CACHE: OnceLock<HashMap<i64, CachedEntity>> = OnceLock::new();
 
 #[derive(Debug, thiserror::Error)]
 pub enum DbInitError {
@@ -52,40 +51,11 @@ pub struct EncounterMetadata {
     pub player_names: Vec<PlayerNameEntry>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct CachedEntity {
-    pub entity_id: i64,
-    pub name: Option<String>,
-    pub class_id: Option<i32>,
-    pub class_spec: Option<i32>,
-    pub ability_score: Option<i32>,
-    pub level: Option<i32>,
-    pub first_seen_ms: Option<i64>,
-    pub last_seen_ms: Option<i64>,
-    pub attributes: Option<String>,
-    pub dirty: bool,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct CachedPlayerData {
-    pub player_id: i64,
-    pub last_seen_ms: i64,
-    pub vdata_bytes: Vec<u8>,
-    pub dirty: bool,
-}
-
 pub fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as i64
-}
-
-pub fn load_initial_entity_cache() -> HashMap<i64, CachedEntity> {
-    PRELOADED_ENTITY_CACHE
-        .get()
-        .cloned()
-        .unwrap_or_else(HashMap::new)
 }
 
 pub fn default_db_path() -> PathBuf {
@@ -112,30 +82,6 @@ fn apply_sqlite_pragmas(conn: &mut SqliteConnection) {
     let _ = diesel::sql_query("PRAGMA journal_mode=WAL;").execute(conn);
     let _ = diesel::sql_query("PRAGMA synchronous=NORMAL;").execute(conn);
     let _ = diesel::sql_query("PRAGMA foreign_keys=ON;").execute(conn);
-}
-
-fn load_entity_cache_from_conn(conn: &mut SqliteConnection) -> Result<HashMap<i64, CachedEntity>, String> {
-    use sch::entities::dsl as en;
-    let rows: Vec<m::EntityRow> = en::entities.load::<m::EntityRow>(conn).map_err(|e| e.to_string())?;
-    let mut cache = HashMap::with_capacity(rows.len());
-    for row in rows {
-        cache.insert(
-            row.entity_id,
-            CachedEntity {
-                entity_id: row.entity_id,
-                name: row.name,
-                class_id: row.class_id,
-                class_spec: row.class_spec,
-                ability_score: row.ability_score,
-                level: row.level,
-                first_seen_ms: row.first_seen_ms,
-                last_seen_ms: row.last_seen_ms,
-                attributes: row.attributes,
-                dirty: false,
-            },
-        );
-    }
-    Ok(cache)
 }
 
 fn db_thread_main(mut conn: SqliteConnection, rx: mpsc::Receiver<DbTask>) {
@@ -198,11 +144,6 @@ pub fn init_db() -> Result<(), DbInitError> {
     conn.run_pending_migrations(MIGRATIONS)
         .map_err(|e| DbInitError::Migration(e.to_string()))?;
 
-    if PRELOADED_ENTITY_CACHE.get().is_none() {
-        let cache = load_entity_cache_from_conn(&mut conn).unwrap_or_default();
-        let _ = PRELOADED_ENTITY_CACHE.set(cache);
-    }
-
     let (tx, rx) = mpsc::channel::<DbTask>();
     std::thread::Builder::new()
         .name("db-worker".to_string())
@@ -216,63 +157,18 @@ pub fn init_db() -> Result<(), DbInitError> {
     Ok(())
 }
 
-pub fn flush_entity_cache(entries: Vec<CachedEntity>) {
-    if entries.is_empty() {
-        return;
-    }
-
-    db_send(move |conn| {
-        use sch::entities::dsl as en;
-
-        for entry in &entries {
-            let seen_at = entry.last_seen_ms.unwrap_or_else(now_ms);
-            let first_seen = entry.first_seen_ms.or(Some(seen_at));
-            let insert = m::NewEntity {
-                entity_id: entry.entity_id,
-                name: entry.name.as_deref(),
-                class_id: entry.class_id,
-                class_spec: entry.class_spec,
-                ability_score: entry.ability_score,
-                level: entry.level,
-                first_seen_ms: first_seen,
-                last_seen_ms: Some(seen_at),
-                attributes: entry.attributes.as_deref(),
-            };
-            let update = m::UpdateEntity {
-                name: entry.name.as_deref(),
-                class_id: entry.class_id,
-                class_spec: entry.class_spec,
-                ability_score: entry.ability_score,
-                level: entry.level,
-                last_seen_ms: Some(seen_at),
-                attributes: entry.attributes.as_deref(),
-            };
-
-            let result = diesel::insert_into(en::entities)
-                .values(&insert)
-                .on_conflict(en::entity_id)
-                .do_update()
-                .set(&update)
-                .execute(conn);
-            if let Err(e) = result {
-                log::warn!(target: "app::db", "flush_entity_cache_failed error={}", e);
-            }
-        }
-    })
-}
-
-pub fn flush_playerdata(data: CachedPlayerData) {
+pub fn flush_playerdata(player_id: i64, last_seen_ms: i64, vdata_bytes: Vec<u8>) {
     db_send(move |conn| {
         use sch::detailed_playerdata::dsl as dp;
 
         let insert = m::NewDetailedPlayerData {
-            player_id: data.player_id,
-            last_seen_ms: data.last_seen_ms,
-            vdata_bytes: Some(data.vdata_bytes.as_slice()),
+            player_id,
+            last_seen_ms,
+            vdata_bytes: Some(vdata_bytes.as_slice()),
         };
         let update = m::UpdateDetailedPlayerData {
-            last_seen_ms: data.last_seen_ms,
-            vdata_bytes: Some(data.vdata_bytes.as_slice()),
+            last_seen_ms,
+            vdata_bytes: Some(vdata_bytes.as_slice()),
         };
 
         let result = diesel::insert_into(dp::detailed_playerdata)

@@ -4,6 +4,7 @@ pub mod commands;
 pub mod commands_models;
 pub mod dungeon_dirty_blob;
 pub mod dungeon_log;
+pub mod entity_attr_store;
 pub mod event_manager;
 pub mod live_main;
 pub mod opcodes_models;

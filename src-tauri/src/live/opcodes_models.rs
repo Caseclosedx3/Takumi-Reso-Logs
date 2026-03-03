@@ -85,6 +85,9 @@ pub enum AttrType {
     MountDuration,
     FightPoint,
     SeasonStrength,
+    SkillCd,
+    SkillCdPct,
+    CdAcceleratePct,
     Level,
     RankLevel,
     Crit,
@@ -154,6 +157,9 @@ impl AttrType {
             attr_type::ATTR_MOUNT_DURATION => Some(AttrType::MountDuration),
             attr_type::ATTR_FIGHT_POINT => Some(AttrType::FightPoint),
             attr_type::ATTR_SEASON_STRENGTH => Some(AttrType::SeasonStrength),
+            attr_type::ATTR_SKILL_CD => Some(AttrType::SkillCd),
+            attr_type::ATTR_SKILL_CD_PCT => Some(AttrType::SkillCdPct),
+            attr_type::ATTR_CD_ACCELERATE_PCT => Some(AttrType::CdAcceleratePct),
             attr_type::ATTR_LEVEL => Some(AttrType::Level),
             attr_type::ATTR_RANK_LEVEL => Some(AttrType::RankLevel),
             attr_type::ATTR_CRIT => Some(AttrType::Crit),
@@ -222,6 +228,9 @@ impl AttrType {
             AttrType::MountDuration => attr_type::ATTR_MOUNT_DURATION,
             AttrType::FightPoint => attr_type::ATTR_FIGHT_POINT,
             AttrType::SeasonStrength => attr_type::ATTR_SEASON_STRENGTH,
+            AttrType::SkillCd => attr_type::ATTR_SKILL_CD,
+            AttrType::SkillCdPct => attr_type::ATTR_SKILL_CD_PCT,
+            AttrType::CdAcceleratePct => attr_type::ATTR_CD_ACCELERATE_PCT,
             AttrType::Level => attr_type::ATTR_LEVEL,
             AttrType::RankLevel => attr_type::ATTR_RANK_LEVEL,
             AttrType::Crit => attr_type::ATTR_CRIT,
@@ -326,8 +335,9 @@ pub struct Entity {
     pub level: i32,
     // Raw monster name captured from packet ATTR_NAME when available (monsters only)
     pub monster_name_packet: Option<String>,
-    // Extended attribute storage (HP, stats, flags, etc.)
-    pub attributes: HashMap<AttrType, AttrValue>,
+    // Legacy attribute storage retained for MessagePack compatibility with old encounter blobs.
+    #[serde(default)]
+    pub _legacy_attributes: HashMap<AttrType, AttrValue>,
     // Damage
     pub damage: CombatStats,
     pub skill_uid_to_dmg_skill: HashMap<i64, Skill>,
@@ -349,6 +359,7 @@ pub struct Entity {
     pub dmg_to_target: HashMap<i64, u128>,
     pub skill_dmg_to_target: HashMap<(i64, i64), SkillTargetStats>,
     pub skill_heal_to_target: HashMap<(i64, i64), SkillTargetStats>,
+    pub season_strength: i32,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -423,10 +434,6 @@ impl Encounter {
             entity.skill_dmg_to_target.clear();
             entity.active_dmg_time_ms = 0;
             entity.last_dmg_timestamp_ms = None;
-
-            // Clear stale HP attributes for monsters so new encounters don't reuse old boss health
-            entity.attributes.remove(&AttrType::CurrentHp);
-            entity.attributes.remove(&AttrType::MaxHp);
 
             // Healing
             entity.healing = CombatStats::default();
@@ -647,208 +654,6 @@ pub mod class {
 }
 
 impl Entity {
-    /// Get an attribute value by type. TODO: Rename some of these to actual attribute names.
-    pub fn get_attr(&self, attr_type: AttrType) -> Option<&AttrValue> {
-        self.attributes.get(&attr_type)
-    }
-
-    /// Set an attribute value.
-    pub fn set_attr(&mut self, attr_type: AttrType, value: AttrValue) {
-        self.attributes.insert(attr_type, value);
-    }
-
-    /// Get current HP as i64.
-    pub fn hp(&self) -> Option<i64> {
-        self.get_attr(AttrType::CurrentHp).and_then(|v| v.as_int())
-    }
-
-    /// Get max HP as i64.
-    pub fn max_hp(&self) -> Option<i64> {
-        self.get_attr(AttrType::MaxHp).and_then(|v| v.as_int())
-    }
-
-    /// Get rank level as i64.
-    pub fn rank_level(&self) -> Option<i64> {
-        self.get_attr(AttrType::RankLevel).and_then(|v| v.as_int())
-    }
-
-    /// Get crit stat as i64.
-    pub fn crit(&self) -> Option<i64> {
-        self.get_attr(AttrType::Crit).and_then(|v| v.as_int())
-    }
-
-    /// Get lucky stat as i64.
-    pub fn lucky(&self) -> Option<i64> {
-        self.get_attr(AttrType::Lucky).and_then(|v| v.as_int())
-    }
-
-    /// Get haste stat as i64.
-    pub fn haste(&self) -> Option<i64> {
-        self.get_attr(AttrType::Haste).and_then(|v| v.as_int())
-    }
-
-    /// Get mastery stat as i64.
-    pub fn mastery(&self) -> Option<i64> {
-        self.get_attr(AttrType::Mastery).and_then(|v| v.as_int())
-    }
-
-    /// Get season strength as i64.
-    pub fn season_strength(&self) -> Option<i64> {
-        self.get_attr(AttrType::SeasonStrength)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get element flag as string.
-    #[allow(dead_code)]
-    pub fn element_flag(&self) -> Option<&str> {
-        self.get_attr(AttrType::ElementFlag)
-            .and_then(|v| v.as_string())
-    }
-
-    /// Get energy flag as string.
-    #[allow(dead_code)]
-    pub fn energy_flag(&self) -> Option<&str> {
-        self.get_attr(AttrType::EnergyFlag)
-            .and_then(|v| v.as_string())
-    }
-
-    /// Get reduction level as i64.
-    pub fn reduction_level(&self) -> Option<i64> {
-        self.get_attr(AttrType::ReductionLevel)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get team/party ID as i64.
-    pub fn team_id(&self) -> Option<i64> {
-        self.get_attr(AttrType::TeamId).and_then(|v| v.as_int())
-    }
-
-    /// Get attack power as i64.
-    #[allow(dead_code)]
-    pub fn attack_power(&self) -> Option<i64> {
-        self.get_attr(AttrType::AttackPower)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get defense power as i64.
-    #[allow(dead_code)]
-    pub fn defense_power(&self) -> Option<i64> {
-        self.get_attr(AttrType::DefensePower)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get star/enhancement level as i64.
-    #[allow(dead_code)]
-    pub fn star_level(&self) -> Option<i64> {
-        self.get_attr(AttrType::StarLevel).and_then(|v| v.as_int())
-    }
-
-    /// Get gear tier as i64.
-    #[allow(dead_code)]
-    pub fn gear_tier(&self) -> Option<i64> {
-        self.get_attr(AttrType::GearTier).and_then(|v| v.as_int())
-    }
-
-    /// Get PvP rank as i64.
-    #[allow(dead_code)]
-    pub fn pvp_rank(&self) -> Option<i64> {
-        self.get_attr(AttrType::PvpRank).and_then(|v| v.as_int())
-    }
-
-    /// Get total combat power as i64.
-    #[allow(dead_code)]
-    pub fn total_power(&self) -> Option<i64> {
-        self.get_attr(AttrType::TotalPower).and_then(|v| v.as_int())
-    }
-
-    /// Get physical attack stat as i64.
-    #[allow(dead_code)]
-    pub fn physical_attack(&self) -> Option<i64> {
-        self.get_attr(AttrType::PhysicalAttack)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get magic attack stat as i64.
-    #[allow(dead_code)]
-    pub fn magic_attack(&self) -> Option<i64> {
-        self.get_attr(AttrType::MagicAttack)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get weapon type as i64.
-    #[allow(dead_code)]
-    pub fn weapon_type(&self) -> Option<i64> {
-        self.get_attr(AttrType::WeaponType).and_then(|v| v.as_int())
-    }
-
-    /// Get resurrection count as i64.
-    #[allow(dead_code)]
-    pub fn resurrection_count(&self) -> Option<i64> {
-        self.get_attr(AttrType::ResurrectionCount)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get party role as i64.
-    #[allow(dead_code)]
-    pub fn party_role(&self) -> Option<i64> {
-        self.get_attr(AttrType::PartyRole).and_then(|v| v.as_int())
-    }
-
-    /// Get combat state as i64.
-    #[allow(dead_code)]
-    pub fn combat_state(&self) -> Option<i64> {
-        self.get_attr(AttrType::CombatState)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get equipment slot 1 data as i64.
-    #[allow(dead_code)]
-    pub fn equipment_slot_1(&self) -> Option<i64> {
-        self.get_attr(AttrType::EquipmentSlot1)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get equipment slot 2 data as i64.
-    #[allow(dead_code)]
-    pub fn equipment_slot_2(&self) -> Option<i64> {
-        self.get_attr(AttrType::EquipmentSlot2)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get current shield value as i64.
-    #[allow(dead_code)]
-    pub fn current_shield(&self) -> Option<i64> {
-        self.get_attr(AttrType::CurrentShield)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get elemental resistance 1 as i64.
-    #[allow(dead_code)]
-    pub fn elemental_res_1(&self) -> Option<i64> {
-        self.get_attr(AttrType::ElementalRes1)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get elemental resistance 2 as i64.
-    #[allow(dead_code)]
-    pub fn elemental_res_2(&self) -> Option<i64> {
-        self.get_attr(AttrType::ElementalRes2)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get elemental resistance 3 as i64.
-    #[allow(dead_code)]
-    pub fn elemental_res_3(&self) -> Option<i64> {
-        self.get_attr(AttrType::ElementalRes3)
-            .and_then(|v| v.as_int())
-    }
-
-    /// Get buff slot data as i64.
-    #[allow(dead_code)]
-    pub fn buff_slot(&self) -> Option<i64> {
-        self.get_attr(AttrType::BuffSlot).and_then(|v| v.as_int())
-    }
-
     /// Assign monster type id and update display name from mapping if available.
     pub fn set_monster_type(&mut self, monster_id: i32) {
         self.monster_type_id = Some(monster_id);
@@ -887,17 +692,6 @@ impl Entity {
         // If not identified by ID, check for 'Boss' text in the raw packet name
         if let Some(packet_name) = &self.monster_name_packet {
             if packet_name.to_lowercase().contains("boss") {
-                return true;
-            }
-        }
-
-        // Fallback: if ATTR_ELITE_STATUS is present and non-zero, consider it a boss
-        if let Some(elite_status) = self
-            .attributes
-            .get(&AttrType::EliteStatus)
-            .and_then(|v| v.as_int())
-        {
-            if elite_status > 0 {
                 return true;
             }
         }
@@ -977,67 +771,6 @@ mod tests {
         assert_eq!(AttrType::RankLevel.to_id(), 0x274c);
         assert_eq!(AttrType::CurrentHp.to_id(), 0x2c2e);
         assert_eq!(AttrType::MaxHp.to_id(), 0x2c38);
-    }
-
-    #[test]
-    fn entity_attribute_storage() {
-        let mut entity = Entity::default();
-
-        // Set attributes
-        entity.set_attr(AttrType::CurrentHp, AttrValue::Int(1000));
-        entity.set_attr(AttrType::MaxHp, AttrValue::Int(1500));
-        entity.set_attr(AttrType::RankLevel, AttrValue::Int(50));
-        entity.set_attr(AttrType::Crit, AttrValue::Int(250));
-        entity.set_attr(AttrType::Lucky, AttrValue::Int(180));
-        entity.set_attr(AttrType::Haste, AttrValue::Int(100));
-        entity.set_attr(AttrType::Mastery, AttrValue::Int(200));
-        entity.set_attr(AttrType::AttackPower, AttrValue::Int(5000));
-        entity.set_attr(AttrType::DefensePower, AttrValue::Int(5000));
-        entity.set_attr(AttrType::PhysicalAttack, AttrValue::Int(1200));
-        entity.set_attr(AttrType::MagicAttack, AttrValue::Int(800));
-
-        // Verify typed getters
-        assert_eq!(entity.hp(), Some(1000));
-        assert_eq!(entity.max_hp(), Some(1500));
-        assert_eq!(entity.rank_level(), Some(50));
-        assert_eq!(entity.crit(), Some(250));
-        assert_eq!(entity.lucky(), Some(180));
-        assert_eq!(entity.haste(), Some(100));
-        assert_eq!(entity.mastery(), Some(200));
-        assert_eq!(entity.attack_power(), Some(5000));
-        assert_eq!(entity.defense_power(), Some(5000));
-        assert_eq!(entity.physical_attack(), Some(1200));
-        assert_eq!(entity.magic_attack(), Some(800));
-    }
-
-    #[test]
-    fn entity_attribute_retrieval() {
-        let mut entity = Entity::default();
-        entity.set_attr(AttrType::CurrentHp, AttrValue::Int(500));
-
-        // Test get_attr
-        assert_eq!(
-            entity.get_attr(AttrType::CurrentHp),
-            Some(&AttrValue::Int(500))
-        );
-        assert_eq!(entity.get_attr(AttrType::MaxHp), None);
-    }
-
-    #[test]
-    fn entity_missing_attributes() {
-        let entity = Entity::default();
-
-        // All attribute getters should return None for default entity
-        assert_eq!(entity.hp(), None);
-        assert_eq!(entity.max_hp(), None);
-        assert_eq!(entity.rank_level(), None);
-        assert_eq!(entity.crit(), None);
-        assert_eq!(entity.lucky(), None);
-        assert_eq!(entity.haste(), None);
-        assert_eq!(entity.mastery(), None);
-        assert_eq!(entity.element_flag(), None);
-        assert_eq!(entity.energy_flag(), None);
-        assert_eq!(entity.reduction_level(), None);
     }
 
     #[test]

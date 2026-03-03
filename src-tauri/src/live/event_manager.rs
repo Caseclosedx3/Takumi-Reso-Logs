@@ -1,7 +1,8 @@
 use crate::live::commands_models::{
     BossHealth, HeaderInfo, LiveDataPayload, RawEntityData, to_raw_combat_stats, to_raw_skill_stats,
 };
-use crate::live::opcodes_models::{Encounter, class};
+use crate::live::entity_attr_store::EntityAttrStore;
+use crate::live::opcodes_models::{AttrType, Encounter, class};
 use blueprotobuf_lib::blueprotobuf::EEntityType;
 use log::{info, trace, warn};
 use serde::{Deserialize, Serialize};
@@ -220,6 +221,7 @@ pub type EventManagerMutex = RwLock<EventManager>;
 
 pub fn generate_live_data_payload(
     encounter: &Encounter,
+    attr_store: &EntityAttrStore,
 ) -> LiveDataPayload {
     let elapsed_ms = encounter
         .time_last_combat_packet_ms
@@ -238,13 +240,31 @@ pub fn generate_live_data_payload(
 
         entities.push(RawEntityData {
             uid,
-            name: entity.name.clone(),
-            class_id: entity.class_id,
+            name: attr_store
+                .attr(uid, AttrType::Name)
+                .and_then(|value| value.as_string())
+                .unwrap_or(&entity.name)
+                .to_string(),
+            class_id: attr_store
+                .attr(uid, AttrType::ProfessionId)
+                .and_then(|value| value.as_int())
+                .map_or(entity.class_id, |value| value as i32),
             class_spec: entity.class_spec as i32,
-            class_name: class::get_class_name(entity.class_id),
+            class_name: class::get_class_name(
+                attr_store
+                    .attr(uid, AttrType::ProfessionId)
+                    .and_then(|value| value.as_int())
+                    .map_or(entity.class_id, |value| value as i32),
+            ),
             class_spec_name: class::get_class_spec(entity.class_spec),
-            ability_score: entity.ability_score,
-            season_strength: entity.season_strength().unwrap_or(0) as i32,
+            ability_score: attr_store
+                .attr(uid, AttrType::FightPoint)
+                .and_then(|value| value.as_int())
+                .map_or(entity.ability_score, |value| value as i32),
+            season_strength: attr_store
+                .attr(uid, AttrType::SeasonStrength)
+                .and_then(|value| value.as_int())
+                .map_or(0, |value| value as i32),
             damage: to_raw_combat_stats(&entity.damage),
             damage_boss_only: to_raw_combat_stats(&entity.damage_boss_only),
             healing: to_raw_combat_stats(&entity.healing),
@@ -276,13 +296,22 @@ pub fn generate_live_data_payload(
                 return None;
             }
 
-            let current_hp = entity.hp();
-            let max_hp = entity.max_hp();
+            let current_hp = attr_store
+                .attr(uid, AttrType::CurrentHp)
+                .and_then(|value| value.as_int());
+            let max_hp = attr_store
+                .attr(uid, AttrType::MaxHp)
+                .and_then(|value| value.as_int());
             if current_hp.is_none() && max_hp.is_none() {
                 return None;
             }
 
-            let name = if !entity.name.is_empty() {
+            let name = if let Some(attr_name) = attr_store
+                .attr(uid, AttrType::Name)
+                .and_then(|value| value.as_string())
+            {
+                attr_name.to_string()
+            } else if !entity.name.is_empty() {
                 entity.name.clone()
             } else if let Some(packet_name) = &entity.monster_name_packet {
                 packet_name.clone()
