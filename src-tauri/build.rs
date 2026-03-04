@@ -99,7 +99,7 @@ fn build_module_optimizer() {
     if cuda_enabled {
         if let Some(cuda_home) = find_cuda_home() {
             println!("cargo:warning=Linking CUDA from: {}", cuda_home.display());
-            
+
             build
                 .define("USE_CUDA", None)
                 .include(cuda_home.join("include"));
@@ -193,10 +193,7 @@ fn compile_cuda(cpp_dir: &PathBuf, out_dir: &PathBuf) -> Option<PathBuf> {
     let obj_file = out_dir.join("module_optimizer_cuda.obj");
 
     if !cuda_file.exists() {
-        println!(
-            "cargo:warning=CUDA source file not found: {:?}",
-            cuda_file
-        );
+        println!("cargo:warning=CUDA source file not found: {:?}", cuda_file);
         return None;
     }
 
@@ -223,7 +220,10 @@ fn compile_cuda(cpp_dir: &PathBuf, out_dir: &PathBuf) -> Option<PathBuf> {
 
     std::fs::write(&bat_file, bat_content).expect("Failed to write compile_cuda.bat");
 
-    println!("cargo:warning=Compiling CUDA using batch file: {}", bat_file.display());
+    println!(
+        "cargo:warning=Compiling CUDA using batch file: {}",
+        bat_file.display()
+    );
 
     let output = Command::new("cmd")
         .args(["/C", bat_file.to_str().unwrap()])
@@ -235,8 +235,14 @@ fn compile_cuda(cpp_dir: &PathBuf, out_dir: &PathBuf) -> Option<PathBuf> {
         Some(obj_file)
     } else {
         println!("cargo:warning=CUDA compilation failed, falling back to CPU version");
-        println!("cargo:warning=CUDA output: {}", String::from_utf8_lossy(&output.stdout));
-        println!("cargo:warning=CUDA error: {}", String::from_utf8_lossy(&output.stderr));
+        println!(
+            "cargo:warning=CUDA output: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+        println!(
+            "cargo:warning=CUDA error: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         None
     }
 }

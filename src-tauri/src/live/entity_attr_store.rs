@@ -72,7 +72,8 @@ impl EntityAttrStore {
         if prev == Some(value) {
             return false;
         }
-        self.panel_dirty_attrs.push(PanelAttrState { attr_id, value });
+        self.panel_dirty_attrs
+            .push(PanelAttrState { attr_id, value });
         true
     }
 
@@ -91,25 +92,39 @@ impl EntityAttrStore {
     }
 
     pub fn attr(&self, uid: i64, attr_type: AttrType) -> Option<&AttrValue> {
-        self.attrs.get(&uid).and_then(|entity_attrs| entity_attrs.get(&attr_type))
+        self.attrs
+            .get(&uid)
+            .and_then(|entity_attrs| entity_attrs.get(&attr_type))
     }
 
     pub fn hydrate_entity(&self, uid: i64, entity: &mut Entity) {
-        if let Some(name) = self.attr(uid, AttrType::Name).and_then(AttrValue::as_string) {
+        if let Some(name) = self
+            .attr(uid, AttrType::Name)
+            .and_then(AttrValue::as_string)
+        {
             if !name.is_empty() {
                 entity.name = name.to_string();
             }
         }
-        if let Some(value) = self.attr(uid, AttrType::ProfessionId).and_then(AttrValue::as_int) {
+        if let Some(value) = self
+            .attr(uid, AttrType::ProfessionId)
+            .and_then(AttrValue::as_int)
+        {
             entity.class_id = value as i32;
         }
-        if let Some(value) = self.attr(uid, AttrType::FightPoint).and_then(AttrValue::as_int) {
+        if let Some(value) = self
+            .attr(uid, AttrType::FightPoint)
+            .and_then(AttrValue::as_int)
+        {
             entity.ability_score = value as i32;
         }
         if let Some(value) = self.attr(uid, AttrType::Level).and_then(AttrValue::as_int) {
             entity.level = value as i32;
         }
-        if let Some(value) = self.attr(uid, AttrType::SeasonStrength).and_then(AttrValue::as_int) {
+        if let Some(value) = self
+            .attr(uid, AttrType::SeasonStrength)
+            .and_then(AttrValue::as_int)
+        {
             entity.season_strength = value as i32;
         }
     }

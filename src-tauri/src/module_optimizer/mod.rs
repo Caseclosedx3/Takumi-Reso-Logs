@@ -326,12 +326,7 @@ pub fn strategy_enumeration_gpu(
         .collect();
 
     let modules_to_use: Vec<ModuleInfo> = if modules.len() > 1000 {
-        prefilter_modules_by_total_scores(
-            modules,
-            &options.target_attributes,
-            &min_attr_ids,
-            1000,
-        )
+        prefilter_modules_by_total_scores(modules, &options.target_attributes, &min_attr_ids, 1000)
     } else {
         modules.to_vec()
     };
@@ -361,12 +356,7 @@ pub fn strategy_enumeration_cpu(
         .collect();
 
     let modules_to_use: Vec<ModuleInfo> = if modules.len() > 800 {
-        prefilter_modules_by_total_scores(
-            modules,
-            &options.target_attributes,
-            &min_attr_ids,
-            800,
-        )
+        prefilter_modules_by_total_scores(modules, &options.target_attributes, &min_attr_ids, 800)
     } else {
         modules.to_vec()
     };

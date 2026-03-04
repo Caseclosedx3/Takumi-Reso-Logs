@@ -257,7 +257,7 @@ impl AttrType {
             AttrType::BuffSlot2 => attr_type::ATTR_BUFF_SLOT_2,
             AttrType::Unknown(id) => id,
         }
-}
+    }
 }
 
 impl AttrValue {
@@ -448,7 +448,6 @@ impl Encounter {
         self.pending_player_revives.clear();
         self.last_revive_ms.clear();
         self.last_death_db_ms.clear();
-
     }
 }
 
@@ -548,16 +547,7 @@ pub mod class {
         })
     }
 
-    #[derive(
-        Debug,
-        Default,
-        Clone,
-        Copy,
-        PartialEq,
-        Eq,
-        serde::Serialize,
-        serde::Deserialize
-    )]
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
     pub enum ClassSpec {
         #[default]
         Unknown,

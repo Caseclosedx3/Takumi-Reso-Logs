@@ -1,9 +1,9 @@
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::database::schema as sch;
-use crate::database::db_exec;
 use crate::database::PlayerNameEntry;
+use crate::database::db_exec;
+use crate::database::schema as sch;
 use crate::live::commands_models as lc;
 use crate::live::opcodes_models::class;
 use blueprotobuf_lib::blueprotobuf::EEntityType;
@@ -305,98 +305,132 @@ pub fn get_recent_encounters_filtered(
             ))
             .load(conn)
             .map_err(|er| er.to_string())?;
-    if let Some(filter) = filters {
-        rows.retain(|(_, started, _, _, _, _, scene_name, _, _, is_favorite, boss_names_json, player_names_json)| {
-            if let Some(is_fav) = filter.is_favorite {
-                if is_fav && *is_favorite == 0 {
-                    return false;
-                }
-            }
-            if let Some(from_ms) = filter.date_from_ms {
-                if *started < from_ms {
-                    return false;
-                }
-            }
-            if let Some(to_ms) = filter.date_to_ms {
-                if *started > to_ms {
-                    return false;
-                }
-            }
-            if let Some(ref encounter_names) = filter.encounter_names {
-                if !encounter_names.is_empty() && !scene_name.as_ref().map(|n| encounter_names.contains(n)).unwrap_or(false) {
-                    return false;
-                }
-            }
-            if let Some(ref boss_names) = filter.boss_names {
-                if !boss_names.is_empty() {
-                    let stored: Vec<String> = boss_names_json
-                        .as_ref()
-                        .and_then(|j| serde_json::from_str(j).ok())
-                        .unwrap_or_default();
-                    if !boss_names.iter().any(|b| stored.contains(b)) {
-                        return false;
+        if let Some(filter) = filters {
+            rows.retain(
+                |(
+                    _,
+                    started,
+                    _,
+                    _,
+                    _,
+                    _,
+                    scene_name,
+                    _,
+                    _,
+                    is_favorite,
+                    boss_names_json,
+                    player_names_json,
+                )| {
+                    if let Some(is_fav) = filter.is_favorite {
+                        if is_fav && *is_favorite == 0 {
+                            return false;
+                        }
                     }
-                }
-            }
-            if let Some(ref player_names) = filter.player_names {
-                if !player_names.is_empty() {
-                    let stored = extract_player_names_from_json(player_names_json);
-                    if !player_names.iter().any(|p| stored.contains(p)) {
-                        return false;
+                    if let Some(from_ms) = filter.date_from_ms {
+                        if *started < from_ms {
+                            return false;
+                        }
                     }
-                }
-            }
-            if let Some(ref player_name) = filter.player_name {
-                let trimmed = player_name.trim();
-                if !trimmed.is_empty() {
-                    let stored = extract_player_names_from_json(player_names_json);
-                    if !stored.iter().any(|p| p.contains(trimmed)) {
-                        return false;
+                    if let Some(to_ms) = filter.date_to_ms {
+                        if *started > to_ms {
+                            return false;
+                        }
                     }
-                }
-            }
-            true
-        });
-    }
-    let total_count = rows.len() as i64;
-    let paged_rows = rows
-        .into_iter()
-        .skip(offset.max(0) as usize)
-        .take(limit.max(0) as usize);
-
-    // Collect boss and player data for each encounter
-    let mut mapped: Vec<EncounterSummaryDto> = Vec::new();
-
-    for (id, started, ended, td, th, scene_id, scene_name, duration, remote_id, is_fav, boss_json, player_json) in paged_rows {
-        let boss_entries: Vec<BossSummaryDto> = boss_json
-            .as_ref()
-            .and_then(|j| serde_json::from_str::<Vec<String>>(j).ok())
-            .unwrap_or_default()
+                    if let Some(ref encounter_names) = filter.encounter_names {
+                        if !encounter_names.is_empty()
+                            && !scene_name
+                                .as_ref()
+                                .map(|n| encounter_names.contains(n))
+                                .unwrap_or(false)
+                        {
+                            return false;
+                        }
+                    }
+                    if let Some(ref boss_names) = filter.boss_names {
+                        if !boss_names.is_empty() {
+                            let stored: Vec<String> = boss_names_json
+                                .as_ref()
+                                .and_then(|j| serde_json::from_str(j).ok())
+                                .unwrap_or_default();
+                            if !boss_names.iter().any(|b| stored.contains(b)) {
+                                return false;
+                            }
+                        }
+                    }
+                    if let Some(ref player_names) = filter.player_names {
+                        if !player_names.is_empty() {
+                            let stored = extract_player_names_from_json(player_names_json);
+                            if !player_names.iter().any(|p| stored.contains(p)) {
+                                return false;
+                            }
+                        }
+                    }
+                    if let Some(ref player_name) = filter.player_name {
+                        let trimmed = player_name.trim();
+                        if !trimmed.is_empty() {
+                            let stored = extract_player_names_from_json(player_names_json);
+                            if !stored.iter().any(|p| p.contains(trimmed)) {
+                                return false;
+                            }
+                        }
+                    }
+                    true
+                },
+            );
+        }
+        let total_count = rows.len() as i64;
+        let paged_rows = rows
             .into_iter()
-            .map(|name| BossSummaryDto {
-                monster_name: name,
-                max_hp: None,
-                is_defeated: true,
-            })
-            .collect();
-        let player_entries = parse_player_entries(&player_json);
+            .skip(offset.max(0) as usize)
+            .take(limit.max(0) as usize);
 
-        mapped.push(EncounterSummaryDto {
+        // Collect boss and player data for each encounter
+        let mut mapped: Vec<EncounterSummaryDto> = Vec::new();
+
+        for (
             id,
-            started_at_ms: started,
-            ended_at_ms: ended,
-            total_dmg: td.unwrap_or(0),
-            total_heal: th.unwrap_or(0),
+            started,
+            ended,
+            td,
+            th,
             scene_id,
             scene_name,
             duration,
-            local_player_id: None,
-            bosses: boss_entries,
-            players: player_entries,
-            remote_encounter_id: remote_id,
-            is_favorite: is_fav != 0,
-        });
-    }
+            remote_id,
+            is_fav,
+            boss_json,
+            player_json,
+        ) in paged_rows
+        {
+            let boss_entries: Vec<BossSummaryDto> = boss_json
+                .as_ref()
+                .and_then(|j| serde_json::from_str::<Vec<String>>(j).ok())
+                .unwrap_or_default()
+                .into_iter()
+                .map(|name| BossSummaryDto {
+                    monster_name: name,
+                    max_hp: None,
+                    is_defeated: true,
+                })
+                .collect();
+            let player_entries = parse_player_entries(&player_json);
+
+            mapped.push(EncounterSummaryDto {
+                id,
+                started_at_ms: started,
+                ended_at_ms: ended,
+                total_dmg: td.unwrap_or(0),
+                total_heal: th.unwrap_or(0),
+                scene_id,
+                scene_name,
+                duration,
+                local_player_id: None,
+                bosses: boss_entries,
+                players: player_entries,
+                remote_encounter_id: remote_id,
+                is_favorite: is_fav != 0,
+            });
+        }
 
         Ok(RecentEncountersResult {
             rows: mapped,
@@ -552,7 +586,8 @@ pub fn get_encounter_by_id(encounter_id: i32) -> Result<EncounterSummaryDto, Str
             .map_err(|er| er.to_string())
     })?;
 
-    let boss_names: Vec<BossSummaryDto> = row.11
+    let boss_names: Vec<BossSummaryDto> = row
+        .11
         .as_ref()
         .and_then(|j| serde_json::from_str::<Vec<String>>(j).ok())
         .unwrap_or_default()
@@ -636,7 +671,6 @@ pub fn get_encounter_entities_raw(encounter_id: i32) -> Result<Vec<lc::HistoryEn
     Ok(rows)
 }
 
-
 /// Deletes an encounter by its ID.
 ///
 /// # Arguments
@@ -654,7 +688,8 @@ pub fn delete_encounter(encounter_id: i32) -> Result<(), String> {
         use sch::encounters::dsl as e;
 
         conn.transaction::<(), diesel::result::Error, _>(|conn| {
-            diesel::delete(ed::encounter_data.filter(ed::encounter_id.eq(encounter_id))).execute(conn)?;
+            diesel::delete(ed::encounter_data.filter(ed::encounter_id.eq(encounter_id)))
+                .execute(conn)?;
             diesel::delete(e::encounters.filter(e::id.eq(encounter_id))).execute(conn)?;
             Ok(())
         })
@@ -706,4 +741,3 @@ pub fn toggle_favorite_encounter(id: i32, is_favorite: bool) -> Result<(), Strin
         Ok(())
     })
 }
-

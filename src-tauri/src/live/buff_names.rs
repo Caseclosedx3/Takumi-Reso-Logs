@@ -80,7 +80,9 @@ fn load_buff_names() -> Result<HashMap<i32, BuffNameEntry>, Box<dyn std::error::
             continue;
         }
         let icon = entry.icon.unwrap_or_default();
-        let sprite_file = entry.sprite_file.and_then(|v| if v.is_empty() { None } else { Some(v) });
+        let sprite_file = entry
+            .sprite_file
+            .and_then(|v| if v.is_empty() { None } else { Some(v) });
         buff_map.insert(
             entry.id,
             BuffNameEntry {
@@ -110,7 +112,9 @@ pub fn is_valid(buff_id: i32) -> bool {
 /// Returns sprite file name when available.
 pub fn lookup_sprite(buff_id: i32) -> Option<String> {
     let cache = BUFF_CACHE.read();
-    cache.get(&buff_id).and_then(|entry| entry.sprite_file.clone())
+    cache
+        .get(&buff_id)
+        .and_then(|entry| entry.sprite_file.clone())
 }
 
 /// Returns all buffs that have a sprite file for selection.
@@ -119,14 +123,11 @@ pub fn get_buffs_with_sprites() -> Vec<BuffSpriteEntry> {
     let mut result: Vec<BuffSpriteEntry> = cache
         .iter()
         .filter_map(|(id, entry)| {
-            entry
-                .sprite_file
-                .as_ref()
-                .map(|sprite| BuffSpriteEntry {
-                    base_id: *id,
-                    name: entry.name.clone(),
-                    sprite_file: sprite.clone(),
-                })
+            entry.sprite_file.as_ref().map(|sprite| BuffSpriteEntry {
+                base_id: *id,
+                name: entry.name.clone(),
+                sprite_file: sprite.clone(),
+            })
         })
         .collect();
     result.sort_by_key(|entry| entry.base_id);
@@ -168,4 +169,3 @@ pub fn reload_cache() -> Result<(), Box<dyn std::error::Error>> {
     *cache = new_map;
     Ok(())
 }
-

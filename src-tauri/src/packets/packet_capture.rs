@@ -115,7 +115,10 @@ impl NpcapSource {
             other => {
                 static LOGGED_DLT: OnceLock<i32> = OnceLock::new();
                 if LOGGED_DLT.set(other).is_ok() {
-                    warn!("Unsupported Npcap datalink type {}, dropping packets", other);
+                    warn!(
+                        "Unsupported Npcap datalink type {}, dropping packets",
+                        other
+                    );
                 }
                 None
             }
@@ -156,7 +159,8 @@ pub fn start_capture(
 
     // Use std::thread::spawn to avoid blocking the async runtime with WinDivert recv
     std::thread::spawn(move || {
-        let capture_span = tracing::info_span!(target: "app::capture", "capture_thread", method = ?method);
+        let capture_span =
+            tracing::info_span!(target: "app::capture", "capture_thread", method = ?method);
         let _capture_guard = capture_span.enter();
         loop {
             read_packets(
@@ -165,7 +169,7 @@ pub fn start_capture(
                 &mut restart_receiver,
                 method.clone(),
             );
-            
+
             // Check if this was a requested restart or a crash/exit
             if !*restart_receiver.borrow() {
                 warn!("Packet capture exited unexpectedly. Restarting in 1s...");
@@ -192,7 +196,8 @@ fn read_packets(
     restart_receiver: &mut watch::Receiver<bool>,
     method: CaptureMethod,
 ) {
-    let read_span = tracing::info_span!(target: "app::capture", "capture_read_loop", method = ?method);
+    let read_span =
+        tracing::info_span!(target: "app::capture", "capture_read_loop", method = ?method);
     let _read_guard = read_span.enter();
 
     let mut source: Box<dyn PacketSource> = match method {
@@ -293,7 +298,8 @@ fn read_packets(
                         len_bytes[2],
                         len_bytes[3],
                     ])
-                    .saturating_sub(FRAG_LENGTH_SIZE as u32) as usize;
+                    .saturating_sub(FRAG_LENGTH_SIZE as u32)
+                        as usize;
                     offset += FRAG_LENGTH_SIZE;
 
                     if tcp_payload.len().saturating_sub(offset) < tcp_frag_payload_len {

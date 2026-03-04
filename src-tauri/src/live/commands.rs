@@ -74,13 +74,10 @@ pub fn disable_blur(app: tauri::AppHandle) {
 /// * `Result<(), String>` - An empty result.
 #[tauri::command]
 #[specta::specta]
-pub async fn reset_encounter(
-    state_manager: tauri::State<'_, AppStateManager>,
-) -> Result<(), String> {
+pub fn reset_encounter(state_manager: tauri::State<'_, AppStateManager>) -> Result<(), String> {
     state_manager
         .inner()
-        .send_state_event(StateEvent::ResetEncounter { is_manual: true })
-        .await?;
+        .send_state_event(StateEvent::ResetEncounter { is_manual: true })?;
     info!("encounter reset via command");
     Ok(())
 }
@@ -96,7 +93,7 @@ pub async fn reset_encounter(
 /// * `Result<(), String>` - An empty result.
 #[tauri::command]
 #[specta::specta]
-pub async fn toggle_pause_encounter(
+pub fn toggle_pause_encounter(
     state_manager: tauri::State<'_, AppStateManager>,
 ) -> Result<(), String> {
     state_manager.send_toggle_pause_encounter()?;
@@ -115,13 +112,13 @@ pub async fn toggle_pause_encounter(
 /// * `Result<(), String>` - An empty result.
 #[tauri::command]
 #[specta::specta]
-pub async fn set_event_update_rate_ms(
+pub fn set_event_update_rate_ms(
     rate_ms: u64,
     state_manager: tauri::State<'_, AppStateManager>,
 ) -> Result<(), String> {
     // Clamp to reasonable range: 50ms to 2000ms
     let clamped = rate_ms.clamp(50, 2000);
-    state_manager.set_event_update_rate_ms(clamped).await?;
+    state_manager.set_event_update_rate_ms(clamped)?;
     info!("Event update rate set to: {}ms", clamped);
     Ok(())
 }
@@ -129,31 +126,31 @@ pub async fn set_event_update_rate_ms(
 /// Sets the monitored buff list for buff updates.
 #[tauri::command]
 #[specta::specta]
-pub async fn set_monitored_buffs(
+pub fn set_monitored_buffs(
     buff_base_ids: Vec<i32>,
     state_manager: tauri::State<'_, AppStateManager>,
 ) -> Result<(), String> {
     info!("[buff] set monitored buffs: {:?}", buff_base_ids);
-    state_manager.set_monitored_buffs(buff_base_ids).await?;
+    state_manager.set_monitored_buffs(buff_base_ids)?;
     Ok(())
 }
 
 /// Sets the monitored panel attribute list for panel attribute updates.
 #[tauri::command]
 #[specta::specta]
-pub async fn set_monitored_panel_attrs(
+pub fn set_monitored_panel_attrs(
     attr_ids: Vec<i32>,
     state_manager: tauri::State<'_, AppStateManager>,
 ) -> Result<(), String> {
     info!("[panel-attr] set monitored attrs: {:?}", attr_ids);
-    state_manager.set_monitored_panel_attrs(attr_ids).await?;
+    state_manager.set_monitored_panel_attrs(attr_ids)?;
     Ok(())
 }
 
 /// Returns all buffs that have a sprite image available.
 #[tauri::command]
 #[specta::specta]
-pub async fn get_available_buffs(
+pub fn get_available_buffs(
     _state_manager: tauri::State<'_, AppStateManager>,
 ) -> Result<Vec<crate::live::commands_models::BuffDefinition>, String> {
     use crate::live::buff_names;
@@ -177,7 +174,7 @@ pub async fn get_available_buffs(
 /// Returns display names for requested buff ids, including buffs without sprite images.
 #[tauri::command]
 #[specta::specta]
-pub async fn get_buff_names(
+pub fn get_buff_names(
     base_ids: Vec<i32>,
     _state_manager: tauri::State<'_, AppStateManager>,
 ) -> Result<Vec<crate::live::commands_models::BuffNameInfo>, String> {
@@ -207,7 +204,7 @@ pub async fn get_buff_names(
 /// Searches buffs by name and returns matching entries, including no-icon buffs.
 #[tauri::command]
 #[specta::specta]
-pub async fn search_buffs_by_name(
+pub fn search_buffs_by_name(
     keyword: String,
     limit: Option<usize>,
     _state_manager: tauri::State<'_, AppStateManager>,
@@ -235,7 +232,7 @@ pub async fn search_buffs_by_name(
 /// Sets the monitored skill list for skill CD updates.
 #[tauri::command]
 #[specta::specta]
-pub async fn set_monitored_skills(
+pub fn set_monitored_skills(
     skill_level_ids: Vec<i32>,
     state_manager: tauri::State<'_, AppStateManager>,
 ) -> Result<(), String> {
@@ -245,28 +242,28 @@ pub async fn set_monitored_skills(
 
     info!("[skill-cd] set monitored skills: {:?}", skill_level_ids);
 
-    state_manager.set_monitored_skills(skill_level_ids).await?;
+    state_manager.set_monitored_skills(skill_level_ids)?;
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn set_monitor_all_buff(
+pub fn set_monitor_all_buff(
     monitor_all_buff: bool,
     state_manager: tauri::State<'_, AppStateManager>,
 ) -> Result<(), String> {
     info!("[monitor-buff] set monitorAllBuff: {:?}", monitor_all_buff);
-    state_manager.set_monitor_all_buff(monitor_all_buff).await?;
+    state_manager.set_monitor_all_buff(monitor_all_buff)?;
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn set_buff_priority(
+pub fn set_buff_priority(
     priority_buff_ids: Vec<i32>,
     state_manager: tauri::State<'_, AppStateManager>,
 ) -> Result<(), String> {
     info!("[monitor-buff] set buff priority: {:?}", priority_buff_ids);
-    state_manager.set_buff_priority(priority_buff_ids).await?;
+    state_manager.set_buff_priority(priority_buff_ids)?;
     Ok(())
 }

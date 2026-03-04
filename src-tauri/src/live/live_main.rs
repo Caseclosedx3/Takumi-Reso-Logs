@@ -1,4 +1,11 @@
 use crate::live::state::{AppState, AppStateManager, StateEvent};
+use crate::live::{
+    commands_models::{
+        BuffUpdatePayload, FightResourceUpdatePayload, PanelAttrUpdatePayload, SkillCdUpdatePayload,
+    },
+    event_manager::{BossDeathPayload, EncounterUpdatePayload, SceneChangePayload},
+    event_manager::{OutboundEvent, safe_emit_to},
+};
 use crate::packets;
 use blueprotobuf_lib::blueprotobuf;
 use bytes::Bytes;
@@ -7,6 +14,7 @@ use prost::Message;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
+use tokio::sync::mpsc::UnboundedReceiver;
 
 const QUEUE_DEPTH_WARN_THRESHOLD: usize = 100;
 const QUEUE_DEPTH_ERROR_THRESHOLD: usize = 500;
@@ -63,7 +71,10 @@ fn log_queue_depth_if_needed(
 /// # Arguments
 ///
 /// * `app_handle` - A handle to the Tauri application instance.
-pub async fn start(app_handle: AppHandle) {
+pub async fn start(
+    app_handle: AppHandle,
+    mut control_rx: UnboundedReceiver<crate::live::state::LiveControlCommand>,
+) {
     let live_span = tracing::info_span!(
         target: "app::live",
         "live_meter",
@@ -74,8 +85,7 @@ pub async fn start(app_handle: AppHandle) {
 
     // Get the state manager from app state
     let state_manager = app_handle.state::<AppStateManager>().inner().clone();
-    let mut state = AppState::new(app_handle.clone());
-    state.event_manager.initialize(app_handle.clone());
+    let mut state = AppState::new();
 
     // Throttling for events - rate is read dynamically from state each iteration
     let mut last_emit_time = Instant::now();
@@ -97,7 +107,7 @@ pub async fn start(app_handle: AppHandle) {
             &mut queue_depth_warn_counter,
             &mut queue_depth_last_log_at,
         );
-        state_manager.apply_pending_control_commands(&mut state).await;
+        state_manager.drain_control_commands(&mut state, &mut control_rx);
 
         // Use tokio::time::timeout to ensure we emit periodically even if no packets arrive
         let packet_result = tokio::time::timeout(heartbeat_duration, rx.recv()).await;
@@ -310,10 +320,9 @@ pub async fn start(app_handle: AppHandle) {
                     }
                 }
 
-                state_manager
-                    .handle_events_batch_with_state(&mut state, batch_events)
-                    .await;
-                state_manager.apply_pending_control_commands(&mut state).await;
+                state_manager.handle_events_batch_with_state(&mut state, batch_events);
+                state_manager.drain_control_commands(&mut state, &mut control_rx);
+                flush_outbound_events(&app_handle, &mut state);
 
                 // Check if we should emit events (throttling)
                 // Read current event update rate from state dynamically
@@ -322,10 +331,9 @@ pub async fn start(app_handle: AppHandle) {
                 let now = Instant::now();
                 if now.duration_since(last_emit_time) >= emit_throttle_duration {
                     last_emit_time = now;
-                    state_manager
-                        .update_and_emit_events_with_state(&mut state)
-                        .await;
+                    state_manager.update_and_emit_events_with_state(&mut state);
                 }
+                flush_outbound_events(&app_handle, &mut state);
             }
             Ok(None) => {
                 warn!(
@@ -341,10 +349,92 @@ pub async fn start(app_handle: AppHandle) {
                 let now = Instant::now();
                 if now.duration_since(last_emit_time) >= emit_throttle_duration {
                     last_emit_time = now;
-                    state_manager
-                        .update_and_emit_events_with_state(&mut state)
-                        .await;
+                    state_manager.update_and_emit_events_with_state(&mut state);
                 }
+                flush_outbound_events(&app_handle, &mut state);
+            }
+        }
+    }
+}
+
+fn flush_outbound_events(app_handle: &AppHandle, state: &mut AppState) {
+    for event in state.event_manager.drain_outbound_events() {
+        match event {
+            OutboundEvent::EncounterUpdate {
+                header_info,
+                is_paused,
+            } => {
+                safe_emit_to(
+                    app_handle,
+                    crate::WINDOW_LIVE_LABEL,
+                    "encounter-update",
+                    EncounterUpdatePayload {
+                        header_info,
+                        is_paused,
+                    },
+                );
+            }
+            OutboundEvent::EncounterReset => {
+                safe_emit_to(app_handle, crate::WINDOW_LIVE_LABEL, "reset-encounter", "");
+            }
+            OutboundEvent::EncounterPause(is_paused) => {
+                safe_emit_to(
+                    app_handle,
+                    crate::WINDOW_LIVE_LABEL,
+                    "pause-encounter",
+                    is_paused,
+                );
+            }
+            OutboundEvent::SceneChange(scene_name) => {
+                safe_emit_to(
+                    app_handle,
+                    crate::WINDOW_LIVE_LABEL,
+                    "scene-change",
+                    SceneChangePayload { scene_name },
+                );
+            }
+            OutboundEvent::BossDeath { boss_name } => {
+                safe_emit_to(
+                    app_handle,
+                    crate::WINDOW_LIVE_LABEL,
+                    "boss-death",
+                    BossDeathPayload { boss_name },
+                );
+            }
+            OutboundEvent::LiveData(payload) => {
+                safe_emit_to(app_handle, crate::WINDOW_LIVE_LABEL, "live-data", payload);
+            }
+            OutboundEvent::BuffUpdate(buffs) => {
+                safe_emit_to(
+                    app_handle,
+                    crate::WINDOW_GAME_OVERLAY_LABEL,
+                    "buff-update",
+                    BuffUpdatePayload { buffs },
+                );
+            }
+            OutboundEvent::SkillCdUpdate(skill_cds) => {
+                safe_emit_to(
+                    app_handle,
+                    crate::WINDOW_GAME_OVERLAY_LABEL,
+                    "skill-cd-update",
+                    SkillCdUpdatePayload { skill_cds },
+                );
+            }
+            OutboundEvent::PanelAttrUpdate(attrs) => {
+                safe_emit_to(
+                    app_handle,
+                    crate::WINDOW_GAME_OVERLAY_LABEL,
+                    "panel-attr-update",
+                    PanelAttrUpdatePayload { attrs },
+                );
+            }
+            OutboundEvent::FightResourceUpdate(fight_res) => {
+                safe_emit_to(
+                    app_handle,
+                    crate::WINDOW_GAME_OVERLAY_LABEL,
+                    "fight-res-update",
+                    FightResourceUpdatePayload { fight_res },
+                );
             }
         }
     }

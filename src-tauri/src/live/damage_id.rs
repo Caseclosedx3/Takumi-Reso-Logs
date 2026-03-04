@@ -15,7 +15,10 @@ struct RawSkillFightLevelEntry {
 
 static SKILL_LEVEL_TO_EFFECT: LazyLock<HashMap<i32, i32>> = LazyLock::new(|| {
     load_skill_level_to_effect_map().unwrap_or_else(|err| {
-        warn!("[damage-id] failed to load SkillFightLevelTable.json: {}", err);
+        warn!(
+            "[damage-id] failed to load SkillFightLevelTable.json: {}",
+            err
+        );
         HashMap::new()
     })
 });

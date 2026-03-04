@@ -135,8 +135,10 @@ impl NpcapCapture {
                 .map_err(|e| e.to_string())?;
             let _get_err: Symbol<PcapGetErr> =
                 context.lib.get(b"pcap_geterr").map_err(|e| e.to_string())?;
-            let data_link_fn: Symbol<PcapDataLink> =
-                context.lib.get(b"pcap_datalink").map_err(|e| e.to_string())?;
+            let data_link_fn: Symbol<PcapDataLink> = context
+                .lib
+                .get(b"pcap_datalink")
+                .map_err(|e| e.to_string())?;
 
             let device_c = CString::new(device_name).map_err(|e| e.to_string())?;
             let mut errbuf = [0i8; 256];

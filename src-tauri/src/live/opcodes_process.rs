@@ -1,8 +1,8 @@
 // NOTE: opcodes_process works on Encounter directly; avoid importing opcodes_models at top-level.
 use crate::database::{flush_playerdata, now_ms};
+use crate::live::damage_id;
 use crate::live::dungeon_log::{BattleStateMachine, EncounterResetReason};
 use crate::live::entity_attr_store::EntityAttrStore;
-use crate::live::damage_id;
 use crate::live::opcodes_models::class::{
     ClassSpec, get_class_id_from_spec, get_class_spec_from_skill_id,
 };
@@ -67,6 +67,11 @@ pub struct ParsedSkillCd {
     pub duration: Option<i32>,
     pub skill_cd_type: Option<i32>,
     pub valid_cd_time: Option<i32>,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct EnterSceneResult {
+    pub scene_id: Option<i32>,
 }
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -242,11 +247,15 @@ pub fn process_sync_near_entities(
                 );
             }
             EEntityType::EntMonster => {
-                process_monster_attrs(target_entity, target_uid, pkt_entity.attrs?.attrs, attr_store);
+                process_monster_attrs(
+                    target_entity,
+                    target_uid,
+                    pkt_entity.attrs?.attrs,
+                    attr_store,
+                );
             }
             _ => {}
         }
-
     }
 
     // Track party members for wipe detection (collect data first to avoid borrow issues)
@@ -477,8 +486,8 @@ pub fn process_sync_to_me_delta_info(
         })
         .collect();
 
-    if let Some(base_delta) = delta_info.base_delta {
-        result.buff_effect_bytes = base_delta.buff_effect.clone();
+    if let Some(mut base_delta) = delta_info.base_delta {
+        result.buff_effect_bytes = base_delta.buff_effect.take();
         if let Some(attrs_collection) = base_delta.attrs.as_ref() {
             result.fight_resources = attrs_collection
                 .attrs
@@ -501,6 +510,53 @@ pub fn process_sync_to_me_delta_info(
     }
 
     result
+}
+
+pub(crate) fn extract_scene_id_from_attr_collection(
+    attrs: &blueprotobuf::AttrCollection,
+) -> Option<i32> {
+    for attr in &attrs.attrs {
+        if attr.id == Some(attr_type::ATTR_SCENE_BASIC_ID) {
+            if let Some(raw) = &attr.raw_data {
+                let mut buf = raw.as_slice();
+                if let Ok(v) = prost::encoding::decode_varint(&mut buf) {
+                    if v <= i32::MAX as u64 {
+                        let scene_id = v as i32;
+                        info!(
+                            "Found scene_id {} from AttrSceneBasicId({})",
+                            scene_id,
+                            attr_type::ATTR_SCENE_BASIC_ID
+                        );
+                        return Some(scene_id);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+pub(crate) fn process_enter_scene(
+    attr_store: &mut EntityAttrStore,
+    enter_scene: &blueprotobuf::EnterScene,
+    monitored_panel_attr_ids: &[i32],
+) -> EnterSceneResult {
+    if let Some(info) = enter_scene.enter_scene_info.as_ref() {
+        if let Some(player_ent) = info.player_ent.as_ref() {
+            if let Some(attrs) = player_ent.attrs.as_ref() {
+                apply_panel_attrs(attr_store, attrs, monitored_panel_attr_ids);
+            }
+        }
+    }
+
+    let scene_id = enter_scene
+        .enter_scene_info
+        .as_ref()
+        .and_then(|info| info.scene_attrs.as_ref())
+        .and_then(extract_scene_id_from_attr_collection);
+
+    EnterSceneResult { scene_id }
 }
 
 pub(crate) fn aoi_delta_has_player_damage(delta: &blueprotobuf::AoiSyncDelta) -> bool {
@@ -593,11 +649,15 @@ pub fn process_aoi_sync_delta(
                 );
             }
             EEntityType::EntMonster => {
-                process_monster_attrs(&mut target_entity, target_uid, attrs_collection.attrs, attr_store);
+                process_monster_attrs(
+                    &mut target_entity,
+                    target_uid,
+                    attrs_collection.attrs,
+                    attr_store,
+                );
             }
             _ => {}
         }
-
     }
 
     let Some(skill_effect) = aoi_sync_delta.skill_effects else {
@@ -609,7 +669,7 @@ pub fn process_aoi_sync_delta(
         // Timestamp for this event
         let timestamp_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
+            .unwrap_or_default()
             .as_millis();
         let timestamp_ms_i64 = timestamp_ms.min(i64::MAX as u128) as i64;
         let non_lucky_dmg = sync_damage_info.value;
@@ -905,7 +965,7 @@ pub fn process_aoi_sync_delta(
     // Figure out timestamps.
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
+        .unwrap_or_default()
         .as_millis();
 
     if encounter.time_fight_start_ms == Default::default() {
@@ -918,7 +978,9 @@ pub fn process_aoi_sync_delta(
 
 fn decode_varint_i64(raw: &[u8]) -> Option<i64> {
     let mut buf = raw;
-    prost::encoding::decode_varint(&mut buf).ok().map(|v| v as i64)
+    prost::encoding::decode_varint(&mut buf)
+        .ok()
+        .map(|v| v as i64)
 }
 
 fn decode_varint_i64_or_default(raw: Option<&[u8]>) -> i64 {

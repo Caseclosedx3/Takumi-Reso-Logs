@@ -43,7 +43,6 @@ impl<'a> BlobCursor<'a> {
         self.offset += 4 + PAD_BYTES;
         Ok(v)
     }
-
 }
 
 fn parse_dungeon_target_data(cur: &mut BlobCursor<'_>) -> Result<DirtyDungeonTarget, String> {

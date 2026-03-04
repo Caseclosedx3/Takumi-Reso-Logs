@@ -71,9 +71,8 @@ fn locate_meter_data_file(relative_path: &str) -> Option<PathBuf> {
 }
 
 fn load_cd_temp_attr_defs() -> Result<HashMap<i32, CdTempAttrDef>, Box<dyn std::error::Error>> {
-    let path = locate_meter_data_file(TEMP_ATTR_TABLE_RELATIVE).ok_or_else(|| {
-        format!("{} not found in known locations", TEMP_ATTR_TABLE_RELATIVE)
-    })?;
+    let path = locate_meter_data_file(TEMP_ATTR_TABLE_RELATIVE)
+        .ok_or_else(|| format!("{} not found in known locations", TEMP_ATTR_TABLE_RELATIVE))?;
     let contents = fs::read_to_string(path)?;
     let raw_map: HashMap<String, RawTempAttrDef> = serde_json::from_str(&contents)?;
 
@@ -97,7 +96,10 @@ fn load_cd_temp_attr_defs() -> Result<HashMap<i32, CdTempAttrDef>, Box<dyn std::
 
 fn load_skill_effect_tags() -> Result<HashMap<i32, Vec<i32>>, Box<dyn std::error::Error>> {
     let path = locate_meter_data_file(SKILL_EFFECT_TABLE_RELATIVE).ok_or_else(|| {
-        format!("{} not found in known locations", SKILL_EFFECT_TABLE_RELATIVE)
+        format!(
+            "{} not found in known locations",
+            SKILL_EFFECT_TABLE_RELATIVE
+        )
     })?;
     let contents = fs::read_to_string(path)?;
     let raw_map: HashMap<String, RawSkillEffectEntry> = serde_json::from_str(&contents)?;
@@ -135,7 +137,12 @@ pub fn calculate_skill_cd(
         .collect();
     info!(
         "[skill-cd] calc skill_level_id={} base_cd={} attr_skill_cd={} attr_skill_cd_pct={} attr_cd_accelerate_pct={} temp_attrs={:?}",
-        skill_level_id, base_cd, attr_skill_cd, attr_skill_cd_pct, attr_cd_accelerate_pct, temp_attrs_nonzero
+        skill_level_id,
+        base_cd,
+        attr_skill_cd,
+        attr_skill_cd_pct,
+        attr_cd_accelerate_pct,
+        temp_attrs_nonzero
     );
 
     if base_cd <= 0.0 {

@@ -241,7 +241,9 @@ pub fn save_encounter(encounter: &Encounter, metadata: &EncounterMetadata) {
                 duration: metadata.duration,
             };
 
-            diesel::insert_into(e::encounters).values(&new_enc).execute(tx)?;
+            diesel::insert_into(e::encounters)
+                .values(&new_enc)
+                .execute(tx)?;
             let encounter_id: i32 = e::encounters.order(e::id.desc()).select(e::id).first(tx)?;
 
             diesel::update(e::encounters.filter(e::id.eq(encounter_id)))

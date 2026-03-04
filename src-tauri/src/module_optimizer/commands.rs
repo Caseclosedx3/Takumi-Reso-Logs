@@ -3,8 +3,8 @@ use super::{
     check_gpu_support as check_gpu_support_internal, optimize_modules, parse_modules_from_vdata,
     strategy_enumeration_cpu, strategy_enumeration_gpu,
 };
-use crate::database::schema::detailed_playerdata::dsl as dpd;
 use crate::database::db_exec;
+use crate::database::schema::detailed_playerdata::dsl as dpd;
 use blueprotobuf_lib::blueprotobuf::CharSerialize;
 use diesel::prelude::*;
 use prost::Message;
@@ -68,7 +68,8 @@ pub async fn optimize_latest_modules(
     let original_count = all_modules.len();
 
     let modules = if !target_attributes.is_empty() {
-        let target_set: std::collections::HashSet<i32> = target_attributes.iter().cloned().collect();
+        let target_set: std::collections::HashSet<i32> =
+            target_attributes.iter().cloned().collect();
         all_modules
             .into_iter()
             .filter(|m| m.parts.iter().any(|p| target_set.contains(&p.id)))

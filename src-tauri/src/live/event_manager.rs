@@ -1,10 +1,11 @@
 use crate::live::commands_models::{
-    BossHealth, HeaderInfo, LiveDataPayload, RawEntityData, to_raw_combat_stats, to_raw_skill_stats,
+    BossHealth, BuffUpdateState, FightResourceState, HeaderInfo, LiveDataPayload, PanelAttrState,
+    RawEntityData, SkillCdState, to_raw_combat_stats, to_raw_skill_stats,
 };
 use crate::live::entity_attr_store::EntityAttrStore;
 use crate::live::opcodes_models::{AttrType, Encounter, class};
 use blueprotobuf_lib::blueprotobuf::EEntityType;
-use log::{info, trace, warn};
+use log::{trace, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tauri::{AppHandle, Emitter, Manager};
@@ -15,7 +16,12 @@ use tokio::sync::RwLock;
 /// (e.g., minimized, hidden, or transitioning).
 ///
 /// Returns `true` if the event was emitted successfully, `false` otherwise.
-fn safe_emit<S: Serialize + Clone>(app_handle: &AppHandle, event: &str, payload: S) -> bool {
+#[allow(dead_code)]
+pub(crate) fn safe_emit<S: Serialize + Clone>(
+    app_handle: &AppHandle,
+    event: &str,
+    payload: S,
+) -> bool {
     // First check if the live window exists and is valid
     let live_window = app_handle.get_webview_window(crate::WINDOW_LIVE_LABEL);
     let main_window = app_handle.get_webview_window(crate::WINDOW_MAIN_LABEL);
@@ -31,8 +37,8 @@ fn safe_emit<S: Serialize + Clone>(app_handle: &AppHandle, event: &str, payload:
         Ok(_) => true,
         Err(e) => {
             // Check if this is a WebView2 state error (0x8007139F)
-            let error_str = format!("{:?}", e);
-            if error_str.contains("0x8007139F") || error_str.contains("not in the correct state") {
+            let error_msg = e.to_string();
+            if error_msg.contains("0x8007139F") || error_msg.contains("not in the correct state") {
                 // This is expected when windows are minimized/hidden - don't spam logs
                 trace!(
                     "WebView2 not ready for '{}' (window may be minimized/hidden)",
@@ -47,33 +53,73 @@ fn safe_emit<S: Serialize + Clone>(app_handle: &AppHandle, event: &str, payload:
     }
 }
 
+pub(crate) fn safe_emit_to<S: Serialize + Clone>(
+    app_handle: &AppHandle,
+    target_label: &str,
+    event: &str,
+    payload: S,
+) -> bool {
+    let Some(window) = app_handle.get_webview_window(target_label) else {
+        trace!(
+            "Skipping emit for '{}': target window '{}' unavailable",
+            event, target_label
+        );
+        return false;
+    };
+
+    match window.emit(event, payload) {
+        Ok(_) => true,
+        Err(e) => {
+            let error_msg = e.to_string();
+            if error_msg.contains("0x8007139F") || error_msg.contains("not in the correct state") {
+                trace!(
+                    "WebView2 not ready for '{}' on '{}' (window may be minimized/hidden)",
+                    event, target_label
+                );
+            } else {
+                warn!("Failed to emit '{}' to '{}': {}", event, target_label, e);
+            }
+            false
+        }
+    }
+}
+
 /// Manages events and emits them to the frontend.
 #[derive(Debug)]
 pub struct EventManager {
-    app_handle: Option<AppHandle>,
+    outbound_events: Vec<OutboundEvent>,
     dead_bosses: HashSet<i64>,
     // Map boss_uid -> boss_name for persisted marking
     dead_boss_names: HashMap<i64, String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum OutboundEvent {
+    EncounterUpdate {
+        header_info: HeaderInfo,
+        is_paused: bool,
+    },
+    EncounterReset,
+    EncounterPause(bool),
+    SceneChange(String),
+    BossDeath {
+        boss_name: String,
+    },
+    LiveData(LiveDataPayload),
+    BuffUpdate(Vec<BuffUpdateState>),
+    SkillCdUpdate(Vec<SkillCdState>),
+    PanelAttrUpdate(Vec<PanelAttrState>),
+    FightResourceUpdate(FightResourceState),
 }
 
 impl EventManager {
     /// Creates a new `EventManager`.
     pub fn new() -> Self {
         Self {
-            app_handle: None,
+            outbound_events: Vec::with_capacity(16),
             dead_bosses: HashSet::new(),
             dead_boss_names: HashMap::new(),
         }
-    }
-
-    /// Initializes the `EventManager` with a Tauri app handle.
-    ///
-    /// # Arguments
-    ///
-    /// * `app_handle` - A handle to the Tauri application instance.
-    pub fn initialize(&mut self, app_handle: AppHandle) {
-        self.app_handle = Some(app_handle);
-        info!("Event manager initialized");
     }
 
     /// Emits an encounter update event.
@@ -82,23 +128,16 @@ impl EventManager {
     ///
     /// * `header_info` - The header information for the encounter.
     /// * `is_paused` - Whether the encounter is paused.
-    pub fn emit_encounter_update(&self, header_info: HeaderInfo, is_paused: bool) {
-        if let Some(app_handle) = &self.app_handle {
-            let payload = EncounterUpdatePayload {
-                header_info,
-                is_paused,
-            };
-            safe_emit(app_handle, "encounter-update", payload);
-        }
+    pub fn emit_encounter_update(&mut self, header_info: HeaderInfo, is_paused: bool) {
+        self.outbound_events.push(OutboundEvent::EncounterUpdate {
+            header_info,
+            is_paused,
+        });
     }
 
     /// Emits an encounter reset event.
-    pub fn emit_encounter_reset(&self) {
-        if let Some(app_handle) = &self.app_handle {
-            if safe_emit(app_handle, "reset-encounter", "") {
-                trace!("Emitted reset-encounter event");
-            }
-        }
+    pub fn emit_encounter_reset(&mut self) {
+        self.outbound_events.push(OutboundEvent::EncounterReset);
     }
 
     /// Emits a reset event specifically for player metrics when a new segment begins.
@@ -112,12 +151,9 @@ impl EventManager {
     /// # Arguments
     ///
     /// * `is_paused` - Whether the encounter is paused.
-    pub fn emit_encounter_pause(&self, is_paused: bool) {
-        if let Some(app_handle) = &self.app_handle {
-            if safe_emit(app_handle, "pause-encounter", is_paused) {
-                trace!("Emitted pause-encounter event: {}", is_paused);
-            }
-        }
+    pub fn emit_encounter_pause(&mut self, is_paused: bool) {
+        self.outbound_events
+            .push(OutboundEvent::EncounterPause(is_paused));
     }
 
     /// Emits a scene change event.
@@ -125,13 +161,9 @@ impl EventManager {
     /// # Arguments
     ///
     /// * `scene_name` - The name of the new scene.
-    pub fn emit_scene_change(&self, scene_name: String) {
-        if let Some(app_handle) = &self.app_handle {
-            let payload = SceneChangePayload { scene_name };
-            if safe_emit(app_handle, "scene-change", payload) {
-                info!("Emitted scene-change event");
-            }
-        }
+    pub fn emit_scene_change(&mut self, scene_name: String) {
+        self.outbound_events
+            .push(OutboundEvent::SceneChange(scene_name));
     }
 
     /// Emits a boss death event.
@@ -146,12 +178,8 @@ impl EventManager {
         if self.dead_bosses.insert(boss_uid) {
             // record the boss name for later persistence
             self.dead_boss_names.insert(boss_uid, boss_name.clone());
-            if let Some(app_handle) = &self.app_handle {
-                let payload = BossDeathPayload { boss_name };
-                if safe_emit(app_handle, "boss-death", payload) {
-                    info!("Emitted boss-death event for {}", boss_uid);
-                }
-            }
+            self.outbound_events
+                .push(OutboundEvent::BossDeath { boss_name });
             return true;
         }
         false
@@ -176,12 +204,33 @@ impl EventManager {
 
     /// Returns whether the `EventManager` should emit events.
     pub fn should_emit_events(&self) -> bool {
-        self.app_handle.is_some()
+        true
     }
 
-    /// Returns a clone of the app handle for lock-free event emission.
-    pub fn get_app_handle(&self) -> Option<AppHandle> {
-        self.app_handle.clone()
+    pub fn emit_live_data(&mut self, payload: LiveDataPayload) {
+        self.outbound_events.push(OutboundEvent::LiveData(payload));
+    }
+
+    pub fn emit_buff_update(&mut self, buffs: Vec<BuffUpdateState>) {
+        self.outbound_events.push(OutboundEvent::BuffUpdate(buffs));
+    }
+
+    pub fn emit_skill_cd_update(&mut self, cds: Vec<SkillCdState>) {
+        self.outbound_events.push(OutboundEvent::SkillCdUpdate(cds));
+    }
+
+    pub fn emit_panel_attr_update(&mut self, attrs: Vec<PanelAttrState>) {
+        self.outbound_events
+            .push(OutboundEvent::PanelAttrUpdate(attrs));
+    }
+
+    pub fn emit_fight_resource_update(&mut self, fight_res: FightResourceState) {
+        self.outbound_events
+            .push(OutboundEvent::FightResourceUpdate(fight_res));
+    }
+
+    pub fn drain_outbound_events(&mut self) -> Vec<OutboundEvent> {
+        std::mem::take(&mut self.outbound_events)
     }
 }
 
@@ -227,7 +276,7 @@ pub fn generate_live_data_payload(
         .time_last_combat_packet_ms
         .saturating_sub(encounter.time_fight_start_ms);
 
-    let mut entities = Vec::new();
+    let mut entities = Vec::with_capacity(encounter.entity_uid_to_entity.len());
     for (&uid, entity) in &encounter.entity_uid_to_entity {
         if entity.entity_type != EEntityType::EntChar {
             continue;

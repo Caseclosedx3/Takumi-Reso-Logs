@@ -4,7 +4,6 @@ use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::OnceLock;
-use tauri::{AppHandle, Manager as _};
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -33,15 +32,6 @@ struct SkillMonitorProfile {
 struct ClassSkillConfig {
     #[serde(default)]
     default_monitored_buff_ids: Vec<i32>,
-}
-
-fn get_skill_monitor_settings_path(app: &AppHandle) -> Option<PathBuf> {
-    let app_config_dir = app.path().app_config_dir().ok()?;
-    Some(
-        app_config_dir
-            .join("tauri-plugin-svelte")
-            .join("skillMonitor.json"),
-    )
 }
 
 fn read_skill_monitor_settings(path: PathBuf) -> Option<SkillMonitorSettings> {
@@ -93,8 +83,11 @@ fn resolve_active_profile(settings: &SkillMonitorSettings) -> Option<&SkillMonit
     settings.profiles.get(idx)
 }
 
-pub fn init_skill_monitor_from_settings(app: &AppHandle, state_manager: &AppStateManager) {
-    let Some(path) = get_skill_monitor_settings_path(app) else {
+pub fn init_skill_monitor_from_settings(
+    settings_path: Option<PathBuf>,
+    state_manager: &AppStateManager,
+) {
+    let Some(path) = settings_path else {
         warn!("[skill-monitor] failed to resolve skillMonitor.json path");
         return;
     };
@@ -128,14 +121,10 @@ pub fn init_skill_monitor_from_settings(app: &AppHandle, state_manager: &AppStat
     let skills_count = monitored_skill_ids.len();
     let buffs_count = merged_buff_ids.len();
 
-    let _ = tauri::async_runtime::block_on(
-        state_manager.apply_skill_monitor_startup(monitored_skill_ids, merged_buff_ids),
-    );
+    let _ = state_manager.apply_skill_monitor_startup(monitored_skill_ids, merged_buff_ids);
 
     info!(
         "[skill-monitor] startup init applied: class={}, skills={}, buffs={}",
-        class_key,
-        skills_count,
-        buffs_count
+        class_key, skills_count, buffs_count
     );
 }
