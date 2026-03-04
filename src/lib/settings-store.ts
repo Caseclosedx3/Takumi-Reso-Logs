@@ -260,7 +260,6 @@ const DEFAULT_GENERAL_SETTINGS = {
   shortenAbilityScore: true,
   shortenDps: true,
   shortenTps: true,
-  bossOnlyDps: false,
   eventUpdateRateMs: 200,
 };
 

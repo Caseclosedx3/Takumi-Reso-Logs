@@ -198,9 +198,6 @@ export const getEncounterEntitiesRaw = (
 ): Promise<Result<RawEntityData[], string>> =>
   commands.getEncounterEntitiesRaw(encounterId);
 
-// New: toggle boss-only DPS filtering on the backend
-export const setBossOnlyDps = (enabled: boolean): Promise<void> => invoke("set_boss_only_dps", { enabled });
-
 export const setEventUpdateRateMs = (rateMs: number): Promise<void> =>
   invoke("set_event_update_rate_ms", { rateMs });
 

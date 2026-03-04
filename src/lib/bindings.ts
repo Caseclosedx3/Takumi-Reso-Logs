@@ -64,26 +64,6 @@ async togglePauseEncounter() : Promise<Result<null, string>> {
 }
 },
 /**
- * Sets whether to only show boss DPS.
- * 
- * # Arguments
- * 
- * * `enabled` - Whether to enable boss-only DPS.
- * * `state_manager` - The state manager.
- * 
- * # Returns
- * 
- * * `Result<(), String>` - An empty result.
- */
-async setBossOnlyDps(enabled: boolean) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("set_boss_only_dps", { enabled }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
  * Sets the event update rate in milliseconds.
  * 
  * # Arguments

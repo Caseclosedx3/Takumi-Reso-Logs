@@ -114,8 +114,6 @@ pub struct AppState {
     pub buff_order_dirty: bool,
     /// A handle to the Tauri application instance.
     pub app_handle: AppHandle,
-    /// Whether to only show boss DPS.
-    pub boss_only_dps: bool,
     /// A map of low HP bosses.
     pub low_hp_bosses: HashMap<i64, u128>,
     /// Whether we've already handled the first scene change after startup.
@@ -151,7 +149,6 @@ pub struct ActiveBuff {
 pub enum LiveControlCommand {
     StateEvent(StateEvent),
     TogglePauseEncounter,
-    SetBossOnlyDps(bool),
     SetEventUpdateRateMs(u64),
     SetMonitoredBuffs(Vec<i32>),
     SetMonitoredPanelAttrs(Vec<i32>),
@@ -184,7 +181,6 @@ impl AppState {
             ordered_buff_uuids: Vec::new(),
             buff_order_dirty: true,
             app_handle,
-            boss_only_dps: false,
             low_hp_bosses: HashMap::new(),
             initial_scene_change_handled: false,
             event_update_rate_ms: 200,
@@ -463,10 +459,6 @@ impl AppStateManager {
             LiveControlCommand::TogglePauseEncounter => {
                 let paused = state.encounter.is_encounter_paused;
                 state.set_encounter_paused(!paused);
-            }
-            LiveControlCommand::SetBossOnlyDps(enabled) => {
-                state.boss_only_dps = enabled;
-                self.update_and_emit_events_with_state(state).await;
             }
             LiveControlCommand::SetEventUpdateRateMs(rate_ms) => {
                 state.event_update_rate_ms = rate_ms;
@@ -1269,10 +1261,6 @@ impl AppStateManager {
             .ok()
             .flatten()
             .is_some()
-    }
-
-    pub async fn set_boss_only_dps(&self, enabled: bool) -> Result<(), String> {
-        self.send_control(LiveControlCommand::SetBossOnlyDps(enabled))
     }
 
     pub async fn set_event_update_rate_ms(&self, rate_ms: u64) -> Result<(), String> {

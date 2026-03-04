@@ -53,7 +53,6 @@ pub fn run() {
             live::commands::disable_blur,
             live::commands::reset_encounter,
             live::commands::toggle_pause_encounter,
-            live::commands::set_boss_only_dps,
             live::commands::set_event_update_rate_ms,
             live::commands::set_monitored_skills,
             live::commands::set_monitored_buffs,

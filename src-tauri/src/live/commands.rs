@@ -5,26 +5,6 @@ use tauri::Manager;
 use window_vibrancy::{apply_blur, clear_blur};
 // request_restart is not needed in this module at present
 
-/// Sets whether to only show boss DPS.
-///
-/// # Arguments
-///
-/// * `enabled` - Whether to enable boss-only DPS.
-/// * `state_manager` - The state manager.
-///
-/// # Returns
-///
-/// * `Result<(), String>` - An empty result.
-#[tauri::command]
-#[specta::specta]
-pub async fn set_boss_only_dps(
-    enabled: bool,
-    state_manager: tauri::State<'_, AppStateManager>,
-) -> Result<(), String> {
-    state_manager.set_boss_only_dps(enabled).await?;
-    Ok(())
-}
-
 /// Enables blur on the live meter window.
 ///
 /// # Arguments
