@@ -116,6 +116,7 @@ export type OverlayPositions = {
   textBuffPanel: Point;
   specialBuffGroup: Point;
   panelAttrGroup: Point;
+  customPanelGroup: Point;
   iconBuffPositions: Record<number, Point>;
 };
 
@@ -124,6 +125,7 @@ export type OverlaySizes = {
   resourceGroupScale: number;
   textBuffPanelScale: number;
   panelAttrGroupScale: number;
+  customPanelGroupScale: number;
   panelAttrGap: number;
   panelAttrFontSize: number;
   panelAttrColumnGap: number;
@@ -134,9 +136,32 @@ export type OverlayVisibility = {
   showSkillCdGroup: boolean;
   showResourceGroup: boolean;
   showPanelAttrGroup: boolean;
+  showCustomPanelGroup: boolean;
+};
+
+export type CustomPanelStyle = {
+  gap: number;
+  columnGap: number;
+  fontSize: number;
+  nameColor: string;
+  valueColor: string;
+  progressColor: string;
 };
 
 export type BuffDisplayMode = "individual" | "grouped";
+
+export type InlineBuffFormat = "active" | "stacks_timer" | "timer";
+
+export type InlineBuffEntry = {
+  id: string;
+  sourceType: "buff" | "counter";
+  sourceId: number;
+  label: string;
+  format: InlineBuffFormat;
+  color: string;
+};
+
+export type PanelAreaRowRef = { type: "attr"; attrId: number };
 
 export type BuffGroup = {
   id: string;
@@ -164,6 +189,9 @@ export type SkillMonitorProfile = {
   buffDisplayMode: BuffDisplayMode;
   buffGroups: BuffGroup[];
   individualMonitorAllGroup?: BuffGroup | null;
+  inlineBuffEntries?: InlineBuffEntry[];
+  panelAreaRowOrder?: PanelAreaRowRef[];
+  customPanelStyle?: CustomPanelStyle;
   textBuffMaxVisible: number;
   overlayPositions: OverlayPositions;
   overlaySizes: OverlaySizes;
@@ -177,6 +205,7 @@ function createDefaultOverlayPositions(): OverlayPositions {
     textBuffPanel: { x: 360, y: 40 },
     specialBuffGroup: { x: 360, y: 220 },
     panelAttrGroup: { x: 700, y: 40 },
+    customPanelGroup: { x: 700, y: 280 },
     iconBuffPositions: {},
   };
 }
@@ -187,6 +216,7 @@ function createDefaultOverlaySizes(): OverlaySizes {
     resourceGroupScale: 1,
     textBuffPanelScale: 1,
     panelAttrGroupScale: 1,
+    customPanelGroupScale: 1,
     panelAttrGap: 4,
     panelAttrFontSize: 14,
     panelAttrColumnGap: 12,
@@ -199,6 +229,18 @@ function createDefaultOverlayVisibility(): OverlayVisibility {
     showSkillCdGroup: true,
     showResourceGroup: true,
     showPanelAttrGroup: true,
+    showCustomPanelGroup: true,
+  };
+}
+
+function createDefaultCustomPanelStyle(): CustomPanelStyle {
+  return {
+    gap: 6,
+    columnGap: 12,
+    fontSize: 14,
+    nameColor: "#ffffff",
+    valueColor: "#ffffff",
+    progressColor: "#ffffff",
   };
 }
 
@@ -237,6 +279,9 @@ export function createDefaultSkillMonitorProfile(
     buffDisplayMode: "individual",
     buffGroups: [],
     individualMonitorAllGroup: null,
+    inlineBuffEntries: [],
+    panelAreaRowOrder: [],
+    customPanelStyle: createDefaultCustomPanelStyle(),
     textBuffMaxVisible: 10,
     overlayPositions: createDefaultOverlayPositions(),
     overlaySizes: createDefaultOverlaySizes(),

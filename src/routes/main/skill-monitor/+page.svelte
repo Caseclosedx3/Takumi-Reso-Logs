@@ -1,8 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import ChevronDown from "virtual:icons/lucide/chevron-down";
   import { commands, type BuffDefinition, type BuffNameInfo } from "$lib/bindings";
   import SettingsSwitch from "../dps/settings/settings-switch.svelte";
+  import TabSkillCd from "./tab-skill-cd.svelte";
+  import TabBuffMonitor from "./tab-buff-monitor.svelte";
+  import TabPanelAttr from "./tab-panel-attr.svelte";
+  import TabCustomPanel from "./tab-custom-panel.svelte";
+  import TabOverlay from "./tab-overlay.svelte";
   import {
     AVAILABLE_PANEL_ATTRS,
     createDefaultBuffGroup,
@@ -10,12 +14,15 @@
     SETTINGS,
     type BuffDisplayMode,
     type BuffGroup,
+    type CustomPanelStyle,
+    type InlineBuffEntry,
     type PanelAttrConfig,
+    type PanelAreaRowRef,
     type SkillMonitorProfile,
   } from "$lib/settings-store";
   import {
-    findAnySkillByBaseId,
     findResonanceSkill,
+    getCounterRules,
     getClassConfigs,
     getSkillsByClass,
     searchResonanceSkills,
@@ -32,6 +39,9 @@
   let groupPrioritySearchKeyword = $state<Record<string, string>>({});
   let groupPrioritySearchResults = $state<Record<string, BuffNameInfo[]>>({});
   let resonanceSearch = $state("");
+  let inlineBuffSearch = $state("");
+  let inlineBuffSearchResults = $state<BuffNameInfo[]>([]);
+  let activeTab = $state<"skill-cd" | "buff" | "panel-attr" | "custom-panel" | "overlay">("skill-cd");
   let attrSectionExpanded = $state(false);
   onMount(() => {
     void (async () => {
@@ -43,6 +53,7 @@
   });
 
   const classConfigs = $derived(getClassConfigs());
+  const counterRules = $derived(getCounterRules());
   const profiles = $derived(SETTINGS.skillMonitor.state.profiles);
   const activeProfileIndex = $derived(
     Math.min(
@@ -82,6 +93,10 @@
   const showPanelAttrGroup = $derived(
     activeProfile.overlayVisibility?.showPanelAttrGroup ?? true,
   );
+  const showCustomPanelGroup = $derived(
+    activeProfile.overlayVisibility?.showCustomPanelGroup ?? true,
+  );
+  const customPanelStyle = $derived.by(() => ensureCustomPanelStyle(activeProfile));
   const buffDisplayMode = $derived(
     activeProfile.buffDisplayMode ?? "individual",
   );
@@ -94,6 +109,19 @@
   const textBuffMaxVisible = $derived(
     Math.max(1, Math.min(20, activeProfile.textBuffMaxVisible ?? 10)),
   );
+  const inlineBuffEntries = $derived.by(() => ensureInlineBuffEntries(activeProfile));
+  const panelAreaRowOrder = $derived.by(() => ensurePanelAreaRowOrder(activeProfile));
+  const filteredInlineBuffSearchResults = $derived.by(() => {
+    const ids = new Set<number>();
+    return inlineBuffSearchResults.filter((item) => {
+      if (ids.has(item.baseId)) return false;
+      if (inlineBuffEntries.some((entry) => entry.sourceType === "buff" && entry.sourceId === item.baseId)) {
+        return false;
+      }
+      ids.add(item.baseId);
+      return true;
+    });
+  });
 
   function uniqueIds(ids: number[]): number[] {
     return Array.from(new Set(ids));
@@ -169,6 +197,42 @@
     });
   }
 
+  function ensureInlineBuffEntries(profile: SkillMonitorProfile): InlineBuffEntry[] {
+    return (profile.inlineBuffEntries ?? []).map((entry, idx) => ({
+      id: entry.id ?? `inline_${idx + 1}`,
+      sourceType: entry.sourceType ?? "buff",
+      sourceId: entry.sourceId,
+      label: entry.label ?? (entry.sourceType === "counter" ? `计数器 ${entry.sourceId}` : `Buff ${entry.sourceId}`),
+      format: entry.format ?? "timer",
+      color: entry.color ?? "#ffffff",
+    }));
+  }
+
+  function isSameRowRef(a: PanelAreaRowRef, b: PanelAreaRowRef): boolean {
+    return a.attrId === b.attrId;
+  }
+
+  function ensurePanelAreaRowOrder(profile: SkillMonitorProfile): PanelAreaRowRef[] {
+    const enabledAttrIds = ensurePanelAttrs(profile)
+      .filter((item) => item.enabled)
+      .map((item) => item.attrId);
+    const attrIdSet = new Set(enabledAttrIds);
+    const normalized: PanelAreaRowRef[] = [];
+    for (const row of profile.panelAreaRowOrder ?? []) {
+      if (!attrIdSet.has(row.attrId)) continue;
+      if (!normalized.some((item) => isSameRowRef(item, row))) {
+        normalized.push({ type: "attr", attrId: row.attrId });
+      }
+    }
+    for (const attrId of enabledAttrIds) {
+      const row: PanelAreaRowRef = { type: "attr", attrId };
+      if (!normalized.some((item) => isSameRowRef(item, row))) {
+        normalized.push(row);
+      }
+    }
+    return normalized;
+  }
+
   function ensureOverlaySizes(profile: SkillMonitorProfile) {
     const current = profile.overlaySizes;
     return {
@@ -176,6 +240,7 @@
       resourceGroupScale: current?.resourceGroupScale ?? 1,
       textBuffPanelScale: current?.textBuffPanelScale ?? 1,
       panelAttrGroupScale: current?.panelAttrGroupScale ?? 1,
+      customPanelGroupScale: current?.customPanelGroupScale ?? 1,
       panelAttrGap: Math.max(0, Math.min(24, Math.round(current?.panelAttrGap ?? 4))),
       panelAttrFontSize: Math.max(
         10,
@@ -186,6 +251,18 @@
         Math.min(240, Math.round(current?.panelAttrColumnGap ?? 12)),
       ),
       iconBuffSizes: current?.iconBuffSizes ?? {},
+    };
+  }
+
+  function ensureCustomPanelStyle(profile: SkillMonitorProfile): CustomPanelStyle {
+    const current = profile.customPanelStyle;
+    return {
+      gap: Math.max(0, Math.min(24, Math.round(current?.gap ?? 6))),
+      columnGap: Math.max(0, Math.min(240, Math.round(current?.columnGap ?? 12))),
+      fontSize: Math.max(10, Math.min(28, Math.round(current?.fontSize ?? 14))),
+      nameColor: current?.nameColor ?? "#ffffff",
+      valueColor: current?.valueColor ?? "#ffffff",
+      progressColor: current?.progressColor ?? "#ffffff",
     };
   }
 
@@ -207,44 +284,6 @@
     state.profiles = currentProfiles.map((profile, i) =>
       i === index ? updater(profile) : profile,
     );
-  }
-
-  function setActiveProfileIndex(index: number) {
-    const maxIndex = Math.max(0, SETTINGS.skillMonitor.state.profiles.length - 1);
-    SETTINGS.skillMonitor.state.activeProfileIndex = Math.min(
-      Math.max(index, 0),
-      maxIndex,
-    );
-  }
-
-  function addProfile() {
-    const nextIndex = SETTINGS.skillMonitor.state.profiles.length + 1;
-    const nextProfile = createDefaultSkillMonitorProfile(`方案 ${nextIndex}`);
-    SETTINGS.skillMonitor.state.profiles = [
-      ...SETTINGS.skillMonitor.state.profiles,
-      nextProfile,
-    ];
-    SETTINGS.skillMonitor.state.activeProfileIndex =
-      SETTINGS.skillMonitor.state.profiles.length - 1;
-  }
-
-  function renameActiveProfile() {
-    const nextName = window.prompt("请输入新的方案名称", activeProfile.name);
-    if (!nextName) return;
-    const trimmedName = nextName.trim();
-    if (!trimmedName) return;
-    updateActiveProfile((profile) => ({ ...profile, name: trimmedName }));
-  }
-
-  function removeActiveProfile() {
-    const state = SETTINGS.skillMonitor.state;
-    if (state.profiles.length <= 1) return;
-    const index = Math.min(
-      Math.max(state.activeProfileIndex, 0),
-      state.profiles.length - 1,
-    );
-    state.profiles = state.profiles.filter((_, i) => i !== index);
-    state.activeProfileIndex = Math.min(index, state.profiles.length - 1);
   }
 
   function setSelectedClass(classKey: string) {
@@ -297,6 +336,22 @@
       monitoredBuffIds: [],
       buffPriorityIds: [],
     }));
+  }
+
+  function setResonanceSearch(value: string) {
+    resonanceSearch = value;
+  }
+
+  function setBuffSearch(value: string) {
+    buffSearch = value;
+  }
+
+  function setGlobalPrioritySearch(value: string) {
+    globalPrioritySearch = value;
+  }
+
+  function setAttrSectionExpanded(expanded: boolean) {
+    attrSectionExpanded = expanded;
   }
 
   function toggleBuff(buffId: number) {
@@ -397,8 +452,21 @@
     })();
   });
 
+  $effect(() => {
+    const keyword = inlineBuffSearch.trim();
+    if (!keyword) {
+      inlineBuffSearchResults = [];
+      return;
+    }
+    void (async () => {
+      const res = await commands.searchBuffsByName(keyword, 120);
+      if (res.status !== "ok") return;
+      inlineBuffSearchResults = res.data;
+    })();
+  });
+
   function setOverlaySectionVisibility(
-    key: "showSkillCdGroup" | "showResourceGroup" | "showPanelAttrGroup",
+    key: "showSkillCdGroup" | "showResourceGroup" | "showPanelAttrGroup" | "showCustomPanelGroup",
     checked: boolean,
   ) {
     updateActiveProfile((profile) => ({
@@ -407,29 +475,42 @@
         showSkillCdGroup: profile.overlayVisibility?.showSkillCdGroup ?? true,
         showResourceGroup: profile.overlayVisibility?.showResourceGroup ?? true,
         showPanelAttrGroup: profile.overlayVisibility?.showPanelAttrGroup ?? true,
+        showCustomPanelGroup: profile.overlayVisibility?.showCustomPanelGroup ?? true,
         [key]: checked,
       },
     }));
   }
 
   function toggleOverlaySectionVisibility(
-    key: "showSkillCdGroup" | "showResourceGroup" | "showPanelAttrGroup",
+    key: "showSkillCdGroup" | "showResourceGroup" | "showPanelAttrGroup" | "showCustomPanelGroup",
   ) {
     const current = key === "showSkillCdGroup"
       ? showSkillCdGroup
       : key === "showResourceGroup"
       ? showResourceGroup
-      : showPanelAttrGroup;
+      : key === "showPanelAttrGroup"
+      ? showPanelAttrGroup
+      : showCustomPanelGroup;
     setOverlaySectionVisibility(key, !current);
   }
 
   function setPanelAttrEnabled(attrId: number, enabled: boolean) {
-    updateActiveProfile((profile) => ({
-      ...profile,
-      monitoredPanelAttrs: ensurePanelAttrs(profile).map((item) =>
+    updateActiveProfile((profile) => {
+      const nextAttrs = ensurePanelAttrs(profile).map((item) =>
         item.attrId === attrId ? { ...item, enabled } : item
-      ),
-    }));
+      );
+      let nextOrder = ensurePanelAreaRowOrder(profile).filter((row) =>
+        nextAttrs.some((item) => item.enabled && item.attrId === row.attrId)
+      );
+      if (enabled && !nextOrder.some((row) => row.type === "attr" && row.attrId === attrId)) {
+        nextOrder = [...nextOrder, { type: "attr", attrId }];
+      }
+      return {
+        ...profile,
+        monitoredPanelAttrs: nextAttrs,
+        panelAreaRowOrder: nextOrder,
+      };
+    });
   }
 
   function setPanelAttrColor(attrId: number, color: string) {
@@ -472,6 +553,133 @@
         panelAttrColumnGap: nextValue,
       },
     }));
+  }
+
+  function setInlineBuffSearch(value: string) {
+    inlineBuffSearch = value;
+  }
+
+  function updateCustomPanelStyle(
+    updater: (style: CustomPanelStyle) => CustomPanelStyle,
+  ) {
+    updateActiveProfile((profile) => ({
+      ...profile,
+      customPanelStyle: updater(ensureCustomPanelStyle(profile)),
+    }));
+  }
+
+  function setCustomPanelGap(value: number) {
+    const nextValue = Math.max(0, Math.min(24, Math.round(value)));
+    updateCustomPanelStyle((style) => ({ ...style, gap: nextValue }));
+  }
+
+  function setCustomPanelFontSize(value: number) {
+    const nextValue = Math.max(10, Math.min(28, Math.round(value)));
+    updateCustomPanelStyle((style) => ({ ...style, fontSize: nextValue }));
+  }
+
+  function setCustomPanelColumnGap(value: number) {
+    const nextValue = Math.max(0, Math.min(240, Math.round(value)));
+    updateCustomPanelStyle((style) => ({ ...style, columnGap: nextValue }));
+  }
+
+  function setCustomPanelNameColor(value: string) {
+    updateCustomPanelStyle((style) => ({ ...style, nameColor: value }));
+  }
+
+  function setCustomPanelValueColor(value: string) {
+    updateCustomPanelStyle((style) => ({ ...style, valueColor: value }));
+  }
+
+  function setCustomPanelProgressColor(value: string) {
+    updateCustomPanelStyle((style) => ({ ...style, progressColor: value }));
+  }
+
+  function addInlineBuffEntry(sourceType: "buff" | "counter", sourceId: number) {
+    updateActiveProfile((profile) => {
+      const entries = ensureInlineBuffEntries(profile);
+      if (entries.some((entry) => entry.sourceType === sourceType && entry.sourceId === sourceId)) {
+        return profile;
+      }
+      const label = sourceType === "counter"
+        ? (counterRules.find((rule) => rule.ruleId === sourceId)?.name ?? `计数器 ${sourceId}`)
+        : (buffNames.get(sourceId)?.name ?? availableBuffMap.get(sourceId)?.name ?? `Buff ${sourceId}`);
+      const nextEntry: InlineBuffEntry = {
+        id: `inline_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+        sourceType,
+        sourceId,
+        label,
+        format: "timer",
+        color: "#ffffff",
+      };
+      return {
+        ...profile,
+        inlineBuffEntries: [...entries, nextEntry],
+      };
+    });
+  }
+
+  function removeInlineBuffEntry(entryId: string) {
+    updateActiveProfile((profile) => ({
+      ...profile,
+      inlineBuffEntries: ensureInlineBuffEntries(profile).filter((entry) => entry.id !== entryId),
+    }));
+  }
+
+  function updateInlineBuffEntry(
+    entryId: string,
+    updater: (entry: InlineBuffEntry) => InlineBuffEntry,
+  ) {
+    updateActiveProfile((profile) => ({
+      ...profile,
+      inlineBuffEntries: ensureInlineBuffEntries(profile).map((entry) =>
+        entry.id === entryId ? updater(entry) : entry
+      ),
+    }));
+  }
+
+  function setInlineBuffLabel(entryId: string, label: string) {
+    updateInlineBuffEntry(entryId, (entry) => ({ ...entry, label }));
+  }
+
+  function movePanelAreaRow(row: PanelAreaRowRef, direction: "up" | "down") {
+    updateActiveProfile((profile) => {
+      const current = ensurePanelAreaRowOrder(profile);
+      const idx = current.findIndex((item) => isSameRowRef(item, row));
+      if (idx === -1) return profile;
+      const target = direction === "up" ? idx - 1 : idx + 1;
+      if (target < 0 || target >= current.length) return profile;
+      const next = [...current];
+      const temp = next[idx];
+      const targetValue = next[target];
+      if (!temp || !targetValue) return profile;
+      next[idx] = targetValue;
+      next[target] = temp;
+      return {
+        ...profile,
+        panelAreaRowOrder: next,
+      };
+    });
+  }
+
+  function moveCustomPanelEntry(entryId: string, direction: "up" | "down") {
+    updateActiveProfile((profile) => {
+      const entries = ensureInlineBuffEntries(profile);
+      const idx = entries.findIndex((entry) => entry.id === entryId);
+      if (idx < 0) return profile;
+      const target = direction === "up" ? idx - 1 : idx + 1;
+      if (target < 0 || target >= entries.length) return profile;
+      const next = [...entries];
+      const temp = next[idx];
+      const targetValue = next[target];
+      if (!temp || !targetValue) return profile;
+      next[idx] = targetValue;
+      next[target] = temp;
+      return {
+        ...profile,
+        inlineBuffEntries: next,
+      };
+    });
   }
 
   function setBuffDisplayMode(mode: BuffDisplayMode) {
@@ -690,1187 +898,158 @@
     />
   </div>
 
-  <div class="rounded-lg border border-border/60 bg-card/40 p-4 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
-    <div>
-      <h2 class="text-base font-semibold text-foreground">配置方案</h2>
-      <p class="text-xs text-muted-foreground">
-        可创建多个角色监控方案并快速切换
-      </p>
-    </div>
-    <div class="flex flex-wrap items-center gap-2">
-      <select
-        class="w-full sm:w-72 rounded border border-border/60 bg-muted/30 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-        value={activeProfileIndex}
-        onchange={(event) =>
-          setActiveProfileIndex(Number((event.currentTarget as HTMLSelectElement).value))}
-      >
-        {#each profiles as profile, idx (idx)}
-          <option value={idx}>{profile.name}</option>
-        {/each}
-      </select>
-      <button
-        type="button"
-        class="text-xs px-3 py-2 rounded border border-border/60 text-foreground hover:bg-muted/40 transition-colors"
-        onclick={addProfile}
-      >
-        新建方案
-      </button>
-      <button
-        type="button"
-        class="text-xs px-3 py-2 rounded border border-border/60 text-foreground hover:bg-muted/40 transition-colors"
-        onclick={renameActiveProfile}
-      >
-        重命名
-      </button>
-      <button
-        type="button"
-        class="text-xs px-3 py-2 rounded border border-border/60 text-destructive hover:bg-destructive/10 transition-colors disabled:text-muted-foreground disabled:hover:bg-transparent"
-        onclick={removeActiveProfile}
-        disabled={profiles.length <= 1}
-      >
-        删除方案
-      </button>
-    </div>
-  </div>
-
-  <div class="rounded-lg border border-border/60 bg-card/40 p-4 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
-    <div>
-      <h2 class="text-base font-semibold text-foreground">Overlay 区域显示</h2>
-      <p class="text-xs text-muted-foreground">
-        可分别控制技能区和资源区是否显示（按方案保存）
-      </p>
-    </div>
-    <div class="space-y-2">
-      <div class="flex flex-wrap gap-2">
-        <button
-          type="button"
-          class="px-3 py-2 rounded-lg text-sm font-medium border transition-colors {showSkillCdGroup
-            ? 'bg-primary text-primary-foreground border-primary'
-            : 'bg-muted/30 text-foreground border-border/60 hover:bg-muted/50'}"
-          onclick={() => toggleOverlaySectionVisibility("showSkillCdGroup")}
-        >
-          技能CD区：{showSkillCdGroup ? "显示" : "隐藏"}
-        </button>
-        <button
-          type="button"
-          class="px-3 py-2 rounded-lg text-sm font-medium border transition-colors {showResourceGroup
-            ? 'bg-primary text-primary-foreground border-primary'
-            : 'bg-muted/30 text-foreground border-border/60 hover:bg-muted/50'}"
-          onclick={() => toggleOverlaySectionVisibility("showResourceGroup")}
-        >
-          资源监控区：{showResourceGroup ? "显示" : "隐藏"}
-        </button>
-        <button
-          type="button"
-          class="px-3 py-2 rounded-lg text-sm font-medium border transition-colors {showPanelAttrGroup
-            ? 'bg-primary text-primary-foreground border-primary'
-            : 'bg-muted/30 text-foreground border-border/60 hover:bg-muted/50'}"
-          onclick={() => toggleOverlaySectionVisibility("showPanelAttrGroup")}
-        >
-          角色属性区：{showPanelAttrGroup ? "显示" : "隐藏"}
-        </button>
-      </div>
-      <p class="text-xs text-muted-foreground">
-        点击按钮切换显示状态（按方案保存）
-      </p>
-    </div>
-  </div>
-
-  <div class="rounded-lg border border-border/60 bg-card/40 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
-    <button
-      type="button"
-      class="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors"
-      onclick={() => (attrSectionExpanded = !attrSectionExpanded)}
-    >
-      <div class="text-left">
-        <h2 class="text-base font-semibold text-foreground">角色面板属性监控</h2>
-        <p class="text-xs text-muted-foreground mt-1">
-          已启用 {monitoredPanelAttrs.filter((item) => item.enabled).length}/{monitoredPanelAttrs.length}
-        </p>
-      </div>
-      <ChevronDown
-        class="w-5 h-5 text-muted-foreground transition-transform duration-200 {attrSectionExpanded
-          ? 'rotate-180'
-          : ''}"
-      />
-    </button>
-    {#if attrSectionExpanded}
-      <div class="px-4 pb-4 space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {#each monitoredPanelAttrs as attr (attr.attrId)}
-            <div class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 space-y-2">
-              <label class="flex items-center justify-between gap-3 text-sm text-foreground">
-                <span>{attr.label}</span>
-                <input
-                  type="checkbox"
-                  checked={attr.enabled}
-                  onchange={(event) =>
-                    setPanelAttrEnabled(attr.attrId, (event.currentTarget as HTMLInputElement).checked)}
-                />
-              </label>
-              <label class="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                <span>显示颜色</span>
-                <input
-                  type="color"
-                  value={attr.color}
-                  class="h-7 w-12 rounded border border-border/60 bg-transparent p-0"
-                  onchange={(event) =>
-                    setPanelAttrColor(attr.attrId, (event.currentTarget as HTMLInputElement).value)}
-                />
-              </label>
-            </div>
-          {/each}
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          <label class="text-xs text-muted-foreground">
-            行间距: {panelAttrGap}px
-            <input
-              class="w-full mt-1"
-              type="range"
-              min="0"
-              max="24"
-              step="1"
-              value={panelAttrGap}
-              oninput={(event) =>
-                setPanelAttrGap(Number((event.currentTarget as HTMLInputElement).value))}
-            />
-          </label>
-          <label class="text-xs text-muted-foreground">
-            字体大小: {panelAttrFontSize}px
-            <input
-              class="w-full mt-1"
-              type="range"
-              min="10"
-              max="28"
-              step="1"
-              value={panelAttrFontSize}
-              oninput={(event) =>
-                setPanelAttrFontSize(Number((event.currentTarget as HTMLInputElement).value))}
-            />
-          </label>
-          <label class="text-xs text-muted-foreground">
-            名称-数值间距: {panelAttrColumnGap}px
-            <input
-              class="w-full mt-1"
-              type="range"
-              min="0"
-              max="240"
-              step="1"
-              value={panelAttrColumnGap}
-              oninput={(event) =>
-                setPanelAttrColumnGap(Number((event.currentTarget as HTMLInputElement).value))}
-            />
-          </label>
-        </div>
-      </div>
-    {/if}
-  </div>
-
-  <div class="rounded-lg border border-border/60 bg-card/40 p-4 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
-    <div>
-      <h2 class="text-base font-semibold text-foreground">Buff 显示模式</h2>
-      <p class="text-xs text-muted-foreground">
-        可在独立定位和分组布局间切换，配置会按方案保存
-      </p>
-    </div>
+  <div class="rounded-lg border border-border/60 bg-card/40 p-2 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
     <div class="flex flex-wrap gap-2">
       <button
         type="button"
-        class="px-3 py-2 rounded-lg text-sm font-medium border transition-colors {buffDisplayMode === 'individual'
+        class="px-3 py-2 rounded-lg text-sm font-medium border transition-colors {activeTab === 'skill-cd'
           ? 'bg-primary text-primary-foreground border-primary'
           : 'bg-muted/30 text-foreground border-border/60 hover:bg-muted/50'}"
-        onclick={() => setBuffDisplayMode("individual")}
+        onclick={() => (activeTab = "skill-cd")}
       >
-        独立模式
+        技能CD
       </button>
       <button
         type="button"
-        class="px-3 py-2 rounded-lg text-sm font-medium border transition-colors {buffDisplayMode === 'grouped'
+        class="px-3 py-2 rounded-lg text-sm font-medium border transition-colors {activeTab === 'buff'
           ? 'bg-primary text-primary-foreground border-primary'
           : 'bg-muted/30 text-foreground border-border/60 hover:bg-muted/50'}"
-        onclick={() => setBuffDisplayMode("grouped")}
+        onclick={() => (activeTab = "buff")}
       >
-        分组模式
+        Buff监控
+      </button>
+      <button
+        type="button"
+        class="px-3 py-2 rounded-lg text-sm font-medium border transition-colors {activeTab === 'panel-attr'
+          ? 'bg-primary text-primary-foreground border-primary'
+          : 'bg-muted/30 text-foreground border-border/60 hover:bg-muted/50'}"
+        onclick={() => (activeTab = "panel-attr")}
+      >
+        角色面板
+      </button>
+      <button
+        type="button"
+        class="px-3 py-2 rounded-lg text-sm font-medium border transition-colors {activeTab === 'custom-panel'
+          ? 'bg-primary text-primary-foreground border-primary'
+          : 'bg-muted/30 text-foreground border-border/60 hover:bg-muted/50'}"
+        onclick={() => (activeTab = "custom-panel")}
+      >
+        自定义面板
+      </button>
+      <button
+        type="button"
+        class="px-3 py-2 rounded-lg text-sm font-medium border transition-colors {activeTab === 'overlay'
+          ? 'bg-primary text-primary-foreground border-primary'
+          : 'bg-muted/30 text-foreground border-border/60 hover:bg-muted/50'}"
+        onclick={() => (activeTab = "overlay")}
+      >
+        Overlay
       </button>
     </div>
-    <label class="block text-xs text-muted-foreground max-w-md">
-      无图标 Buff 最大显示数: {textBuffMaxVisible}
-      <input
-        class="w-full mt-1"
-        type="range"
-        min="1"
-        max="20"
-        step="1"
-        value={textBuffMaxVisible}
-        oninput={(event) => setTextBuffMaxVisible(Number((event.currentTarget as HTMLInputElement).value))}
-      />
-      <span class="block mt-1">超出上限时，按用户设定的优先级截断显示，避免占满屏幕</span>
-    </label>
-    <div class="space-y-2">
-      <div class="text-xs font-medium text-foreground">全局 Buff 优先级</div>
-      <p class="text-xs text-muted-foreground">
-        排在前面的 Buff 优先显示
-      </p>
-      <input
-        class="w-full sm:w-72 rounded border border-border/60 bg-muted/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-        placeholder="搜索并添加到全局优先级"
-        bind:value={globalPrioritySearch}
-      />
-      {#if globalPrioritySearch.trim().length > 0 && globalPrioritySearchResults.length > 0}
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(50px,1fr))] gap-2">
-          {#each globalPrioritySearchResults as item (item.baseId)}
-            {@const iconBuff = availableBuffMap.get(item.baseId)}
-            {#if monitoredBuffIds.includes(item.baseId) && !buffPriorityIds.includes(item.baseId)}
-              <button
-                type="button"
-                class="rounded border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors p-1"
-                title={item.name}
-                onclick={() => toggleGlobalPriority(item.baseId)}
-              >
-                {#if iconBuff}
-                  <img
-                    src={`/images/buff/${iconBuff.spriteFile}`}
-                    alt={iconBuff.name}
-                    class="w-full h-10 object-contain"
-                  />
-                {:else}
-                  <div class="h-10 flex items-center justify-center text-[10px] text-muted-foreground">
-                    无图标
-                  </div>
-                {/if}
-              </button>
-            {/if}
-          {/each}
-        </div>
-      {/if}
-      <div class="space-y-1">
-        {#each buffPriorityIds as buffId, idx (buffId)}
-          {@const iconBuff = availableBuffMap.get(buffId)}
-          {@const nameInfo = buffNames.get(buffId)}
-          <div class="flex items-center gap-2 rounded border border-border/60 bg-muted/20 px-2 py-1">
-            <span class="w-6 text-center text-xs text-muted-foreground">{idx + 1}</span>
-            {#if iconBuff}
-              <img
-                src={`/images/buff/${iconBuff.spriteFile}`}
-                alt={iconBuff.name}
-                class="size-6 object-contain"
-              />
-            {/if}
-            <span class="flex-1 text-xs text-foreground truncate">
-              {nameInfo?.name ?? iconBuff?.name ?? `#${buffId}`}
-            </span>
-            <button
-              type="button"
-              class="text-xs px-2 py-0.5 rounded border border-border/60 hover:bg-muted/40"
-              onclick={() => toggleGlobalPriority(buffId)}
-            >
-              移除
-            </button>
-            <button
-              type="button"
-              class="text-xs px-2 py-0.5 rounded border border-border/60 hover:bg-muted/40 disabled:opacity-50"
-              onclick={() => moveGlobalPriority(buffId, "up")}
-              disabled={idx === 0}
-            >
-              上移
-            </button>
-            <button
-              type="button"
-              class="text-xs px-2 py-0.5 rounded border border-border/60 hover:bg-muted/40 disabled:opacity-50"
-              onclick={() => moveGlobalPriority(buffId, "down")}
-              disabled={idx === buffPriorityIds.length - 1}
-            >
-              下移
-            </button>
-          </div>
-        {/each}
-        {#if buffPriorityIds.length === 0}
-          <div class="text-xs text-muted-foreground">未设置全局优先级，按后端默认顺序显示</div>
-        {/if}
-      </div>
-    </div>
   </div>
 
-  {#if buffDisplayMode === "individual"}
-    <div class="rounded-lg border border-border/60 bg-card/40 p-4 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <h2 class="text-base font-semibold text-foreground">监控全部 Buff </h2>
-          <p class="text-xs text-muted-foreground">
-            新增一个网格区域显示全部 Buff（自动排除已在独立模式中选中的 Buff）
-          </p>
-        </div>
-        {#if !individualMonitorAllGroup}
-          <button
-            type="button"
-            class="text-xs px-3 py-2 rounded border border-border/60 text-foreground hover:bg-muted/40 transition-colors"
-            onclick={addIndividualMonitorAll}
-          >
-            监控全部 Buff
-          </button>
-        {:else}
-          <button
-            type="button"
-            class="text-xs px-3 py-2 rounded border border-border/60 text-destructive hover:bg-destructive/10 transition-colors"
-            onclick={removeIndividualMonitorAll}
-          >
-            移除全部 Buff 分组
-          </button>
-        {/if}
-      </div>
-
-      {#if individualMonitorAllGroup}
-        <div class="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-3">
-          <div class="flex flex-wrap items-center gap-2">
-            <input
-              class="w-52 rounded border border-border/60 bg-muted/30 px-2 py-1.5 text-sm text-foreground"
-              value={individualMonitorAllGroup.name}
-              oninput={(event) =>
-                updateIndividualMonitorAllGroup((curr) => ({
-                  ...curr,
-                  name: (event.currentTarget as HTMLInputElement).value || curr.name,
-                }))}
-            />
-            <span class="text-xs text-muted-foreground">固定为监控全部 Buff</span>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <label class="text-xs text-muted-foreground">
-              图标大小: {individualMonitorAllGroup.iconSize}px
-              <input
-                class="w-full mt-1"
-                type="range"
-                min="24"
-                max="120"
-                step="1"
-                value={individualMonitorAllGroup.iconSize}
-                oninput={(event) =>
-                  updateIndividualMonitorAllGroup((curr) => ({
-                    ...curr,
-                    iconSize: Number((event.currentTarget as HTMLInputElement).value),
-                  }))}
-              />
-            </label>
-            <label class="text-xs text-muted-foreground">
-              列数: {individualMonitorAllGroup.columns}
-              <input
-                class="w-full mt-1"
-                type="range"
-                min="1"
-                max="12"
-                step="1"
-                value={individualMonitorAllGroup.columns}
-                oninput={(event) =>
-                  updateIndividualMonitorAllGroup((curr) => ({
-                    ...curr,
-                    columns: Number((event.currentTarget as HTMLInputElement).value),
-                  }))}
-              />
-            </label>
-            <label class="text-xs text-muted-foreground">
-              行数: {individualMonitorAllGroup.rows}
-              <input
-                class="w-full mt-1"
-                type="range"
-                min="1"
-                max="12"
-                step="1"
-                value={individualMonitorAllGroup.rows}
-                oninput={(event) =>
-                  updateIndividualMonitorAllGroup((curr) => ({
-                    ...curr,
-                    rows: Number((event.currentTarget as HTMLInputElement).value),
-                  }))}
-              />
-            </label>
-            <label class="text-xs text-muted-foreground">
-              间距: {individualMonitorAllGroup.gap}px
-              <input
-                class="w-full mt-1"
-                type="range"
-                min="0"
-                max="16"
-                step="1"
-                value={individualMonitorAllGroup.gap}
-                oninput={(event) =>
-                  updateIndividualMonitorAllGroup((curr) => ({
-                    ...curr,
-                    gap: Number((event.currentTarget as HTMLInputElement).value),
-                  }))}
-              />
-            </label>
-          </div>
-
-          <div class="flex flex-wrap gap-3 text-xs">
-            <label class="flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={individualMonitorAllGroup.showName}
-                onchange={(event) =>
-                  updateIndividualMonitorAllGroup((curr) => ({
-                    ...curr,
-                    showName: (event.currentTarget as HTMLInputElement).checked,
-                  }))}
-              />
-              显示名称
-            </label>
-            <label class="flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={individualMonitorAllGroup.showTime}
-                onchange={(event) =>
-                  updateIndividualMonitorAllGroup((curr) => ({
-                    ...curr,
-                    showTime: (event.currentTarget as HTMLInputElement).checked,
-                  }))}
-              />
-              显示时间
-            </label>
-            <label class="flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={individualMonitorAllGroup.showLayer}
-                onchange={(event) =>
-                  updateIndividualMonitorAllGroup((curr) => ({
-                    ...curr,
-                    showLayer: (event.currentTarget as HTMLInputElement).checked,
-                  }))}
-              />
-              显示层数
-            </label>
-          </div>
-        </div>
-      {/if}
-    </div>
-  {/if}
-
-  {#if buffDisplayMode === "grouped"}
-    <div class="rounded-lg border border-border/60 bg-card/40 p-4 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <h2 class="text-base font-semibold text-foreground">Buff 分组管理</h2>
-          <p class="text-xs text-muted-foreground">
-            通过分组管理 Buff 展示，组内自动网格对齐
-          </p>
-        </div>
-        <button
-          type="button"
-          class="text-xs px-3 py-2 rounded border border-border/60 text-foreground hover:bg-muted/40 transition-colors"
-          onclick={addBuffGroup}
-        >
-          新建分组
-        </button>
-      </div>
-
-      {#if buffGroups.length === 0}
-        <div class="text-xs text-muted-foreground">暂无分组，请先新建一个分组</div>
-      {/if}
-
-      <div class="space-y-3">
-        {#each buffGroups as group (group.id)}
-          <div class="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-3">
-            <div class="flex flex-wrap items-center gap-2">
-              <input
-                class="w-52 rounded border border-border/60 bg-muted/30 px-2 py-1.5 text-sm text-foreground"
-                value={group.name}
-                oninput={(event) =>
-                  updateBuffGroup(group.id, (curr) => ({
-                    ...curr,
-                    name: (event.currentTarget as HTMLInputElement).value || curr.name,
-                  }))}
-              />
-              <button
-                type="button"
-                class="text-xs px-2 py-1 rounded border border-border/60 text-destructive hover:bg-destructive/10 transition-colors"
-                onclick={() => removeBuffGroup(group.id)}
-              >
-                删除分组
-              </button>
-              <label class="ml-auto flex items-center gap-2 text-xs text-foreground">
-                <input
-                  type="checkbox"
-                  checked={group.monitorAll}
-                  onchange={(event) =>
-                    updateBuffGroup(group.id, (curr) => ({
-                      ...curr,
-                      monitorAll: (event.currentTarget as HTMLInputElement).checked,
-                    }))}
-                />
-                监控全部 Buff
-              </label>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label class="text-xs text-muted-foreground">
-                图标大小: {group.iconSize}px
-                <input
-                  class="w-full mt-1"
-                  type="range"
-                  min="24"
-                  max="120"
-                  step="1"
-                  value={group.iconSize}
-                  oninput={(event) =>
-                    updateBuffGroup(group.id, (curr) => ({
-                      ...curr,
-                      iconSize: Number((event.currentTarget as HTMLInputElement).value),
-                    }))}
-                />
-              </label>
-              <label class="text-xs text-muted-foreground">
-                列数: {group.columns}
-                <input
-                  class="w-full mt-1"
-                  type="range"
-                  min="1"
-                  max="12"
-                  step="1"
-                  value={group.columns}
-                  oninput={(event) =>
-                    updateBuffGroup(group.id, (curr) => ({
-                      ...curr,
-                      columns: Number((event.currentTarget as HTMLInputElement).value),
-                    }))}
-                />
-              </label>
-              <label class="text-xs text-muted-foreground">
-                行数: {group.rows}
-                <input
-                  class="w-full mt-1"
-                  type="range"
-                  min="1"
-                  max="12"
-                  step="1"
-                  value={group.rows}
-                  oninput={(event) =>
-                    updateBuffGroup(group.id, (curr) => ({
-                      ...curr,
-                      rows: Number((event.currentTarget as HTMLInputElement).value),
-                    }))}
-                />
-              </label>
-              <label class="text-xs text-muted-foreground">
-                间距: {group.gap}px
-                <input
-                  class="w-full mt-1"
-                  type="range"
-                  min="0"
-                  max="16"
-                  step="1"
-                  value={group.gap}
-                  oninput={(event) =>
-                    updateBuffGroup(group.id, (curr) => ({
-                      ...curr,
-                      gap: Number((event.currentTarget as HTMLInputElement).value),
-                    }))}
-                />
-              </label>
-            </div>
-
-            <div class="flex flex-wrap gap-3 text-xs">
-              <label class="flex items-center gap-1">
-                <input
-                  type="checkbox"
-                  checked={group.showName}
-                  onchange={(event) =>
-                    updateBuffGroup(group.id, (curr) => ({
-                      ...curr,
-                      showName: (event.currentTarget as HTMLInputElement).checked,
-                    }))}
-                />
-                显示名称
-              </label>
-              <label class="flex items-center gap-1">
-                <input
-                  type="checkbox"
-                  checked={group.showTime}
-                  onchange={(event) =>
-                    updateBuffGroup(group.id, (curr) => ({
-                      ...curr,
-                      showTime: (event.currentTarget as HTMLInputElement).checked,
-                    }))}
-                />
-                显示时间
-              </label>
-              <label class="flex items-center gap-1">
-                <input
-                  type="checkbox"
-                  checked={group.showLayer}
-                  onchange={(event) =>
-                    updateBuffGroup(group.id, (curr) => ({
-                      ...curr,
-                      showLayer: (event.currentTarget as HTMLInputElement).checked,
-                    }))}
-                />
-                显示层数
-              </label>
-            </div>
-
-            {#if !group.monitorAll}
-              <div class="space-y-2">
-                <input
-                  class="w-full sm:w-72 rounded border border-border/60 bg-muted/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="搜索并添加到此分组"
-                  value={getGroupSearchKeyword(group.id)}
-                  oninput={(event) =>
-                    setGroupSearchKeyword(group.id, (event.currentTarget as HTMLInputElement).value)}
-                />
-                {#if getGroupSearchResults(group).length > 0}
-                  <div class="grid grid-cols-[repeat(auto-fill,minmax(50px,1fr))] gap-2">
-                    {#each getGroupSearchResults(group).slice(0, 40) as item (item.baseId)}
-                      {@const iconBuff = availableBuffMap.get(item.baseId)}
-                      <button
-                        type="button"
-                        class="rounded border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors p-1"
-                        title={item.name}
-                        onclick={() => toggleBuffInGroup(group.id, item.baseId)}
-                      >
-                        {#if iconBuff}
-                          <img
-                            src={`/images/buff/${iconBuff.spriteFile}`}
-                            alt={iconBuff.name}
-                            class="w-full h-10 object-contain"
-                          />
-                        {:else}
-                          <div class="h-10 flex items-center justify-center text-[10px] text-muted-foreground">
-                            无图标
-                          </div>
-                        {/if}
-                      </button>
-                    {/each}
-                  </div>
-                {/if}
-
-                <div class="text-xs text-muted-foreground">
-                  已分配 Buff（点击可移除）
-                </div>
-                <div class="flex flex-wrap gap-2">
-                  {#each group.buffIds as buffId (buffId)}
-                    {@const iconBuff = availableBuffMap.get(buffId)}
-                    {@const nameInfo = buffNames.get(buffId)}
-                    <button
-                      type="button"
-                      class="relative rounded-md border border-border/60 overflow-hidden bg-muted/20 size-12 hover:border-border hover:bg-muted/30"
-                      title={nameInfo?.name ?? iconBuff?.name ?? `#${buffId}`}
-                      onclick={() => toggleBuffInGroup(group.id, buffId)}
-                    >
-                      {#if iconBuff}
-                        <img
-                          src={`/images/buff/${iconBuff.spriteFile}`}
-                          alt={iconBuff.name}
-                          class="w-full h-full object-contain"
-                        />
-                      {:else}
-                        <div class="w-full h-full flex items-center justify-center text-[10px] text-muted-foreground">
-                          文本
-                        </div>
-                      {/if}
-                    </button>
-                  {/each}
-                  {#if group.buffIds.length === 0}
-                    <div class="text-xs text-muted-foreground">未添加 Buff</div>
-                  {/if}
-                </div>
-                <div class="space-y-1">
-                  <div class="text-xs text-muted-foreground">分组内优先级</div>
-                  <div class="text-xs text-muted-foreground">
-                    可搜索组内 Buff 并添加到优先级列表
-                  </div>
-                  <input
-                    class="w-full sm:w-72 rounded border border-border/60 bg-muted/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    placeholder="搜索并添加到优先级列表"
-                    value={getGroupPrioritySearchKeyword(group.id)}
-                    oninput={(event) =>
-                      setGroupPrioritySearchKeyword(group.id, (event.currentTarget as HTMLInputElement).value)}
-                  />
-                  {#if getGroupPrioritySearchResults(group).length > 0}
-                    <div class="grid grid-cols-[repeat(auto-fill,minmax(50px,1fr))] gap-2">
-                      {#each getGroupPrioritySearchResults(group).slice(0, 40) as item (item.baseId)}
-                        {@const iconBuff = availableBuffMap.get(item.baseId)}
-                        <button
-                          type="button"
-                          class="rounded border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors p-1"
-                          title={item.name}
-                          onclick={() => togglePriorityInGroup(group.id, item.baseId)}
-                        >
-                          {#if iconBuff}
-                            <img
-                              src={`/images/buff/${iconBuff.spriteFile}`}
-                              alt={iconBuff.name}
-                              class="w-full h-10 object-contain"
-                            />
-                          {:else}
-                            <div class="h-10 flex items-center justify-center text-[10px] text-muted-foreground">
-                              无图标
-                            </div>
-                          {/if}
-                        </button>
-                      {/each}
-                    </div>
-                  {/if}
-                  {#each getGroupPriorityIds(group) as buffId, idx (buffId)}
-                    {@const iconBuff = availableBuffMap.get(buffId)}
-                    {@const nameInfo = buffNames.get(buffId)}
-                    <div class="flex items-center gap-2 rounded border border-border/60 bg-muted/20 px-2 py-1">
-                      <span class="w-6 text-center text-xs text-muted-foreground">{idx + 1}</span>
-                      {#if iconBuff}
-                        <img
-                          src={`/images/buff/${iconBuff.spriteFile}`}
-                          alt={iconBuff.name}
-                          class="size-5 object-contain"
-                        />
-                      {/if}
-                      <span class="flex-1 text-xs text-foreground truncate">
-                        {nameInfo?.name ?? iconBuff?.name ?? `#${buffId}`}
-                      </span>
-                      <button
-                        type="button"
-                        class="text-xs px-2 py-0.5 rounded border border-border/60 hover:bg-muted/40"
-                        onclick={() => togglePriorityInGroup(group.id, buffId)}
-                      >
-                        移除
-                      </button>
-                      <button
-                        type="button"
-                        class="text-xs px-2 py-0.5 rounded border border-border/60 hover:bg-muted/40 disabled:opacity-50"
-                        onclick={() => moveGroupPriority(group.id, buffId, "up")}
-                        disabled={idx === 0}
-                      >
-                        上移
-                      </button>
-                      <button
-                        type="button"
-                        class="text-xs px-2 py-0.5 rounded border border-border/60 hover:bg-muted/40 disabled:opacity-50"
-                        onclick={() => moveGroupPriority(group.id, buffId, "down")}
-                        disabled={idx === getGroupPriorityIds(group).length - 1}
-                      >
-                        下移
-                      </button>
-                    </div>
-                  {/each}
-                  {#if getGroupPriorityIds(group).length === 0}
-                    <div class="text-xs text-muted-foreground">未设置优先级，按后端默认顺序显示</div>
-                  {/if}
-                </div>
-              </div>
-            {:else}
-              <div class="space-y-2">
-                <div class="text-xs text-muted-foreground">
-                  当前分组已开启“监控全部 Buff”，可额外配置优先级以便优先展示关键 Buff
-                </div>
-                <input
-                  class="w-full sm:w-72 rounded border border-border/60 bg-muted/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="搜索并添加到优先级列表"
-                  value={getGroupSearchKeyword(group.id)}
-                  oninput={(event) =>
-                    setGroupSearchKeyword(group.id, (event.currentTarget as HTMLInputElement).value)}
-                />
-                {#if getGroupSearchResults(group).length > 0}
-                  <div class="grid grid-cols-[repeat(auto-fill,minmax(50px,1fr))] gap-2">
-                    {#each getGroupSearchResults(group).slice(0, 40) as item (item.baseId)}
-                      {@const iconBuff = availableBuffMap.get(item.baseId)}
-                      <button
-                        type="button"
-                        class="rounded border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors p-1"
-                        title={item.name}
-                        onclick={() => togglePriorityInGroup(group.id, item.baseId)}
-                      >
-                        {#if iconBuff}
-                          <img
-                            src={`/images/buff/${iconBuff.spriteFile}`}
-                            alt={iconBuff.name}
-                            class="w-full h-10 object-contain"
-                          />
-                        {:else}
-                          <div class="h-10 flex items-center justify-center text-[10px] text-muted-foreground">
-                            无图标
-                          </div>
-                        {/if}
-                      </button>
-                    {/each}
-                  </div>
-                {/if}
-                <div class="space-y-1">
-                  <div class="text-xs text-muted-foreground">分组内优先级</div>
-                  {#each getGroupPriorityIds(group) as buffId, idx (buffId)}
-                    {@const iconBuff = availableBuffMap.get(buffId)}
-                    {@const nameInfo = buffNames.get(buffId)}
-                    <div class="flex items-center gap-2 rounded border border-border/60 bg-muted/20 px-2 py-1">
-                      <span class="w-6 text-center text-xs text-muted-foreground">{idx + 1}</span>
-                      {#if iconBuff}
-                        <img
-                          src={`/images/buff/${iconBuff.spriteFile}`}
-                          alt={iconBuff.name}
-                          class="size-5 object-contain"
-                        />
-                      {/if}
-                      <span class="flex-1 text-xs text-foreground truncate">
-                        {nameInfo?.name ?? iconBuff?.name ?? `#${buffId}`}
-                      </span>
-                      <button
-                        type="button"
-                        class="text-xs px-2 py-0.5 rounded border border-border/60 hover:bg-muted/40"
-                        onclick={() => togglePriorityInGroup(group.id, buffId)}
-                      >
-                        移除
-                      </button>
-                      <button
-                        type="button"
-                        class="text-xs px-2 py-0.5 rounded border border-border/60 hover:bg-muted/40 disabled:opacity-50"
-                        onclick={() => moveGroupPriority(group.id, buffId, "up")}
-                        disabled={idx === 0}
-                      >
-                        上移
-                      </button>
-                      <button
-                        type="button"
-                        class="text-xs px-2 py-0.5 rounded border border-border/60 hover:bg-muted/40 disabled:opacity-50"
-                        onclick={() => moveGroupPriority(group.id, buffId, "down")}
-                        disabled={idx === getGroupPriorityIds(group).length - 1}
-                      >
-                        下移
-                      </button>
-                    </div>
-                  {/each}
-                  {#if getGroupPriorityIds(group).length === 0}
-                    <div class="text-xs text-muted-foreground">未设置优先级，按后端默认顺序显示</div>
-                  {/if}
-                </div>
-              </div>
-            {/if}
-          </div>
-        {/each}
-      </div>
-
-      <div class="rounded-md border border-border/60 bg-muted/20 p-3 space-y-2">
-        <div class="text-xs text-muted-foreground">分组布局预览</div>
-        <div class="space-y-2">
-          {#each buffGroups as group (group.id)}
-            <div class="rounded border border-border/50 p-2">
-              <div class="text-xs mb-2 text-foreground">{group.name}{group.monitorAll ? "（全部）" : ""}</div>
-              <div
-                class="grid"
-                style:grid-template-columns={`repeat(${Math.max(1, group.columns)}, minmax(0, ${group.iconSize / 2}px))`}
-                style:gap={`${Math.max(0, group.gap / 2)}px`}
-              >
-                {#if group.monitorAll}
-                  {#each availableBuffs.slice(0, Math.max(6, group.columns * group.rows)) as buff (buff.baseId)}
-                    <img
-                      src={`/images/buff/${buff.spriteFile}`}
-                      alt={buff.name}
-                      class="w-full aspect-square object-contain rounded border border-border/30 bg-muted/20"
-                    />
-                  {/each}
-                {:else}
-                  {#each group.buffIds.slice(0, Math.max(6, group.columns * group.rows)) as buffId (buffId)}
-                    {@const buff = availableBuffMap.get(buffId)}
-                    {#if buff}
-                      <img
-                        src={`/images/buff/${buff.spriteFile}`}
-                        alt={buff.name}
-                        class="w-full aspect-square object-contain rounded border border-border/30 bg-muted/20"
-                      />
-                    {:else}
-                      <div class="w-full aspect-square rounded border border-border/30 bg-muted/20"></div>
-                    {/if}
-                  {/each}
-                {/if}
-              </div>
-            </div>
-          {/each}
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <div class="rounded-lg border border-border/60 bg-card/40 p-4 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
-    <div>
-      <h2 class="text-base font-semibold text-foreground">职业选择</h2>
-      <p class="text-xs text-muted-foreground">
-        支持青岚骑士、冰法职业
-      </p>
-    </div>
-    <div class="flex flex-wrap gap-2">
-      {#each classConfigs as config (config.classKey)}
-        <button
-          type="button"
-          class="px-3 py-2 rounded-lg text-sm font-medium border transition-colors {selectedClassKey === config.classKey
-            ? 'bg-primary text-primary-foreground border-primary'
-            : 'bg-muted/30 text-foreground border-border/60 hover:bg-muted/50'}"
-          onclick={() => setSelectedClass(config.classKey)}
-        >
-          {config.className}
-        </button>
-      {/each}
-    </div>
-  </div>
-
-  <div class="rounded-lg border border-border/60 bg-card/40 p-4 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
-    <div class="flex items-center justify-between">
-      <div>
-        <h2 class="text-base font-semibold text-foreground">技能选择</h2>
-        <p class="text-xs text-muted-foreground">
-          最多监控 10 个技能（2行 x 5列）
-        </p>
-      </div>
-      <div class="flex items-center gap-3">
-        <div class="text-xs text-muted-foreground">
-          已选 {monitoredSkillIds.length}/10
-        </div>
-        <button
-          type="button"
-          class="text-xs px-2 py-1 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-          onclick={clearSkills}
-        >
-          清空
-        </button>
-      </div>
-    </div>
-
-    <div class="grid grid-cols-[repeat(auto-fill,minmax(56px,1fr))] gap-3">
-      {#each classSkills as skill (skill.skillId)}
-        <button
-          type="button"
-          class="relative group rounded-lg border overflow-hidden transition-colors {isSelected(skill.skillId)
-            ? 'border-primary ring-1 ring-primary'
-            : 'border-border/60 hover:border-border'}"
-          onclick={() => toggleSkill(skill.skillId)}
-        >
-          {#if skill.imagePath}
-            <img
-              src={skill.imagePath}
-              alt={skill.name}
-              class="w-full h-full object-cover aspect-square"
-            />
-          {:else}
-            <div class="w-full h-full aspect-square flex items-center justify-center bg-muted/30 text-xs text-muted-foreground">
-              未配置
-            </div>
-          {/if}
-          <div class="absolute inset-x-0 bottom-0 bg-black/50 text-[10px] text-white px-1 py-0.5 truncate">
-            {skill.name || `#${skill.skillId}`}
-          </div>
-        </button>
-      {/each}
-    </div>
-  </div>
-
-  <div class="rounded-lg border border-border/60 bg-card/40 p-4 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
-    <div class="flex items-center justify-between gap-3">
-      <div>
-        <h2 class="text-base font-semibold text-foreground">共鸣技能</h2>
-        <p class="text-xs text-muted-foreground">
-          通过搜索选择共鸣技能，与普通技能共享 10 个监控格
-        </p>
-      </div>
-      <div class="text-xs text-muted-foreground">
-        已选 {selectedResonanceSkills.length}
-      </div>
-    </div>
-
-    <input
-      class="w-full sm:w-64 rounded border border-border/60 bg-muted/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-      placeholder="搜索共鸣技能名称"
-      bind:value={resonanceSearch}
+  {#if activeTab === "skill-cd"}
+    <TabSkillCd
+      {classConfigs}
+      {selectedClassKey}
+      {classSkills}
+      {monitoredSkillIds}
+      {resonanceSearch}
+      {filteredResonanceSkills}
+      {selectedResonanceSkills}
+      {setSelectedClass}
+      {toggleSkill}
+      {isSelected}
+      {clearSkills}
+      {setResonanceSearch}
     />
-
-    {#if resonanceSearch.trim().length > 0}
-      <div class="grid grid-cols-[repeat(auto-fill,minmax(56px,1fr))] gap-3">
-        {#each filteredResonanceSkills as skill (skill.skillId)}
-          <button
-            type="button"
-            class="relative group rounded-lg border overflow-hidden transition-colors {isSelected(skill.skillId)
-              ? 'border-primary ring-1 ring-primary'
-              : 'border-border/60 hover:border-border'}"
-            title={skill.name}
-            onclick={() => toggleSkill(skill.skillId)}
-          >
-            <img
-              src={skill.imagePath}
-              alt={skill.name}
-              class="w-full h-full object-contain aspect-square bg-muted/20"
-            />
-            <div class="absolute inset-x-0 bottom-0 bg-black/50 text-[10px] text-white px-1 py-0.5 truncate">
-              {skill.name}
-            </div>
-          </button>
-        {/each}
-      </div>
-    {:else}
-      <div class="text-xs text-muted-foreground">请输入关键词搜索共鸣技能</div>
-    {/if}
-
-    <div class="space-y-2">
-      <div class="text-xs text-muted-foreground">已选共鸣技能</div>
-      <div class="flex flex-wrap gap-2">
-        {#each selectedResonanceSkills as skill (skill.skillId)}
-          <button
-            type="button"
-            class="relative rounded-md border border-border/60 overflow-hidden bg-muted/20 size-12 hover:border-border hover:bg-muted/30"
-            title={skill.name}
-            onclick={() => toggleSkill(skill.skillId)}
-          >
-            <img
-              src={skill.imagePath}
-              alt={skill.name}
-              class="w-full h-full object-contain"
-            />
-            <div class="absolute inset-x-0 bottom-0 bg-black/60 text-[9px] text-white px-1 py-0.5 truncate">
-              {skill.name}
-            </div>
-          </button>
-        {/each}
-        {#if selectedResonanceSkills.length === 0}
-          <div class="text-xs text-muted-foreground">未选择共鸣技能</div>
-        {/if}
-      </div>
-    </div>
-  </div>
-
-  <div class="rounded-lg border border-border/60 bg-card/40 p-4 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
-    <div class="flex items-center justify-between gap-3">
-      <div>
-        <h2 class="text-base font-semibold text-foreground">Buff 监控</h2>
-        <p class="text-xs text-muted-foreground">
-          统一通过 Buff 名称搜索（含有图标/无图标 Buff）
-        </p>
-      </div>
-      <div class="flex items-center gap-3">
-        <div class="text-xs text-muted-foreground">
-          已选 {monitoredBuffIds.length}
-        </div>
-        <button
-          type="button"
-          class="text-xs px-2 py-1 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-          onclick={clearBuffs}
-        >
-          清空
-        </button>
-      </div>
-    </div>
-
-    <div class="flex flex-wrap gap-3 items-center">
-      <input
-        class="w-full sm:w-64 rounded border border-border/60 bg-muted/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-        placeholder="搜索 Buff 名称"
-        bind:value={buffSearch}
-      />
-    </div>
-
-  {#if buffSearch.trim().length > 0}
-    <div class="grid grid-cols-[repeat(auto-fill,minmax(56px,1fr))] gap-3">
-      {#each filteredBuffs as buff (buff.baseId)}
-        {@const iconBuff = availableBuffMap.get(buff.baseId)}
-        <button
-          type="button"
-          class="relative group rounded-lg border overflow-hidden transition-colors {isBuffSelected(buff.baseId)
-            ? 'border-primary ring-1 ring-primary'
-            : 'border-border/60 hover:border-border'}"
-          title={buff.name}
-          onclick={() => toggleBuff(buff.baseId)}
-        >
-          {#if iconBuff}
-            <img
-              src={`/images/buff/${iconBuff.spriteFile}`}
-              alt={iconBuff.name}
-              class="w-full h-full object-contain aspect-square bg-muted/20"
-            />
-            <div class="absolute inset-x-0 bottom-0 bg-black/50 text-[10px] text-white px-1 py-0.5 truncate">
-              {iconBuff.name.slice(0, 6)}
-            </div>
-          {:else}
-            <div class="w-full h-full aspect-square flex items-center justify-center bg-muted/20 text-[11px] text-foreground p-1 text-center">
-              {buff.name.slice(0, 8)}
-            </div>
-            <div class="absolute right-1 top-1 rounded bg-black/60 px-1 text-[9px] text-white">
-              无图标
-            </div>
-          {/if}
-        </button>
-      {/each}
-    </div>
+  {:else if activeTab === "buff"}
+    <TabBuffMonitor
+      {buffSearch}
+      {filteredBuffs}
+      {monitoredBuffIds}
+      {selectedBuffs}
+      {availableBuffs}
+      {availableBuffMap}
+      {buffNames}
+      {isBuffSelected}
+      {toggleBuff}
+      {clearBuffs}
+      {setBuffSearch}
+      {buffDisplayMode}
+      {setBuffDisplayMode}
+      {textBuffMaxVisible}
+      {setTextBuffMaxVisible}
+      {globalPrioritySearch}
+      {globalPrioritySearchResults}
+      {setGlobalPrioritySearch}
+      {buffPriorityIds}
+      {toggleGlobalPriority}
+      {moveGlobalPriority}
+      {individualMonitorAllGroup}
+      {addIndividualMonitorAll}
+      {removeIndividualMonitorAll}
+      {updateIndividualMonitorAllGroup}
+      {buffGroups}
+      {addBuffGroup}
+      {removeBuffGroup}
+      {updateBuffGroup}
+      {getGroupSearchKeyword}
+      {setGroupSearchKeyword}
+      {getGroupSearchResults}
+      {getGroupPrioritySearchKeyword}
+      {setGroupPrioritySearchKeyword}
+      {getGroupPrioritySearchResults}
+      {getGroupPriorityIds}
+      {toggleBuffInGroup}
+      {togglePriorityInGroup}
+      {moveGroupPriority}
+    />
+  {:else if activeTab === "panel-attr"}
+    <TabPanelAttr
+      {attrSectionExpanded}
+      {monitoredPanelAttrs}
+      {panelAttrGap}
+      {panelAttrFontSize}
+      {panelAttrColumnGap}
+      {panelAreaRowOrder}
+      {setAttrSectionExpanded}
+      {setPanelAttrEnabled}
+      {setPanelAttrColor}
+      {setPanelAttrGap}
+      {setPanelAttrFontSize}
+      {setPanelAttrColumnGap}
+      {movePanelAreaRow}
+    />
+  {:else if activeTab === "custom-panel"}
+    <TabCustomPanel
+      {counterRules}
+      {availableBuffMap}
+      {buffNames}
+      {inlineBuffSearch}
+      {filteredInlineBuffSearchResults}
+      {inlineBuffEntries}
+      {customPanelStyle}
+      {setInlineBuffSearch}
+      {addInlineBuffEntry}
+      {removeInlineBuffEntry}
+      {setInlineBuffLabel}
+      {moveCustomPanelEntry}
+      {setCustomPanelGap}
+      {setCustomPanelFontSize}
+      {setCustomPanelColumnGap}
+      {setCustomPanelNameColor}
+      {setCustomPanelValueColor}
+      {setCustomPanelProgressColor}
+    />
   {:else}
-    <div class="text-xs text-muted-foreground">
-      请输入关键词搜索 Buff
-    </div>
+    <TabOverlay
+      {showSkillCdGroup}
+      {showResourceGroup}
+      {showPanelAttrGroup}
+      {showCustomPanelGroup}
+      {toggleOverlaySectionVisibility}
+    />
   {/if}
 
-    <div class="space-y-2">
-      <div class="text-xs text-muted-foreground">已选 Buff</div>
-      <div class="flex flex-wrap gap-2">
-        {#each monitoredBuffIds as buffId (buffId)}
-          {@const iconBuff = selectedBuffs.find((buff) => buff.baseId === buffId)}
-          {@const nameInfo = buffNames.get(buffId)}
-          {#if iconBuff}
-            <button
-              type="button"
-              class="relative rounded-md border border-border/60 overflow-hidden bg-muted/20 size-12 hover:border-border hover:bg-muted/30"
-              title={iconBuff.name}
-              onclick={() => toggleBuff(iconBuff.baseId)}
-            >
-              <img
-                src={`/images/buff/${iconBuff.spriteFile}`}
-                alt={iconBuff.name}
-                class="w-full h-full object-contain"
-              />
-              <div class="absolute inset-x-0 bottom-0 bg-black/60 text-[9px] text-white px-1 py-0.5 truncate">
-                {iconBuff.name.slice(0, 6)}
-              </div>
-            </button>
-          {:else}
-            <button
-              type="button"
-              class="rounded-md border border-border/60 bg-muted/20 px-2 py-1 text-[11px] text-foreground hover:border-border hover:bg-muted/30"
-              title={nameInfo?.name ?? `#${buffId}`}
-              onclick={() => toggleBuff(buffId)}
-            >
-              {nameInfo?.name ?? `#${buffId}`}
-            </button>
-          {/if}
-        {/each}
-        {#if monitoredBuffIds.length === 0}
-          <div class="text-xs text-muted-foreground">未选择 Buff</div>
-        {/if}
-      </div>
-    </div>
-  </div>
-
-  <div class="rounded-lg border border-border/60 bg-card/40 p-4 space-y-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
-    <div>
-      <h2 class="text-base font-semibold text-foreground">监控预览</h2>
-      <p class="text-xs text-muted-foreground">按选择顺序排列</p>
-    </div>
-    <div class="grid grid-cols-5 gap-2">
-      {#each Array(10) as _, idx (idx)}
-        {@const skillId = monitoredSkillIds[idx]}
-        {@const skill = skillId ? findAnySkillByBaseId(selectedClassKey, skillId) : undefined}
-        <button
-          type="button"
-          class="relative rounded-md border border-border/60 overflow-hidden bg-muted/20 aspect-square text-left {skillId
-            ? 'hover:border-border hover:bg-muted/30'
-            : ''}"
-          onclick={() => {
-            if (skillId) toggleSkill(skillId);
-          }}
-        >
-          {#if skill?.imagePath}
-            <img
-              src={skill.imagePath}
-              alt={skill.name}
-              class="w-full h-full object-cover"
-            />
-          {:else if skillId}
-            <div class="w-full h-full flex items-center justify-center text-[10px] text-muted-foreground">
-              #{skillId}
-            </div>
-          {:else}
-            <div class="w-full h-full flex items-center justify-center text-[10px] text-muted-foreground">
-              空
-            </div>
-          {/if}
-        </button>
-      {/each}
-    </div>
-  </div>
 </div>

@@ -2,6 +2,8 @@ import resonanceSkillIcons from "$lib/config/skill_aoyi_icons.json";
 import classSkillConfigsRaw from "$lib/config/class_skill_configs.json";
 import classResourcesRaw from "$lib/config/class_resources.json";
 import classSpecialBuffDisplaysRaw from "$lib/config/class_special_buff_displays.json";
+import counterRulesRaw from "$lib/config/counter_rules.json";
+import type { CounterAction, CounterTrigger } from "$lib/bindings";
 
 export type SkillDisplayInfo = {
   skillId: number;
@@ -53,6 +55,16 @@ type ResonanceSkillIconRaw = {
 
 export type ResonanceSkillDefinition = SkillDisplayInfo;
 
+export type CounterRulePreset = {
+  ruleId: number;
+  name: string;
+  trigger: CounterTrigger;
+  linkedBuffId: number;
+  threshold: number | null;
+  onBuffAdd: CounterAction;
+  onBuffRemove: CounterAction;
+};
+
 export const CLASS_RESOURCES: Record<string, ResourceDefinition[]> =
   classResourcesRaw as Record<string, ResourceDefinition[]>;
 
@@ -83,8 +95,14 @@ export const RESONANCE_SKILLS: ResonanceSkillDefinition[] = (
     : {}),
 }));
 
+export const COUNTER_RULES: CounterRulePreset[] = counterRulesRaw as CounterRulePreset[];
+
 export function getClassConfigs(): ClassSkillConfig[] {
   return Object.values(CLASS_SKILL_CONFIGS);
+}
+
+export function getCounterRules(): CounterRulePreset[] {
+  return COUNTER_RULES;
 }
 
 export function getSkillsByClass(classKey: string): SkillDefinition[] {

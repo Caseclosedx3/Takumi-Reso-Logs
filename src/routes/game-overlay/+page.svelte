@@ -3,7 +3,9 @@
   import { listen } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import {
+    onBuffCounterUpdate,
     onBuffUpdate,
+    type CounterUpdateState,
     onFightResUpdate,
     onPanelAttrUpdate,
     onSkillCdUpdate,
@@ -15,15 +17,19 @@
     AVAILABLE_PANEL_ATTRS,
     SETTINGS,
     type BuffGroup,
+    type CustomPanelStyle,
+    type InlineBuffEntry,
     type PanelAttrConfig,
     type OverlayPositions,
     type OverlaySizes,
     type OverlayVisibility,
+    type PanelAreaRowRef,
     type SkillMonitorProfile,
   } from "$lib/settings-store";
   import {
     findAnySkillByBaseId,
     findResourcesByClass,
+    getCounterRules,
     type SpecialBuffDisplay,
     findSkillDerivationBySource,
     findSpecialBuffDisplays,
@@ -54,6 +60,8 @@
     layer: number;
     isPlaceholder?: boolean;
   };
+
+  type PanelAreaDisplayRow = { key: string; attr: PanelAttrConfig };
 
   type DragTarget =
     | { kind: "group"; key: keyof Omit<OverlayPositions, "iconBuffPositions"> }
@@ -95,6 +103,7 @@
     textBuffPanel: { x: 360, y: 40 },
     specialBuffGroup: { x: 360, y: 220 },
     panelAttrGroup: { x: 700, y: 40 },
+    customPanelGroup: { x: 700, y: 280 },
     iconBuffPositions: {},
   };
   const DEFAULT_OVERLAY_SIZES: OverlaySizes = {
@@ -102,6 +111,7 @@
     resourceGroupScale: 1,
     textBuffPanelScale: 1,
     panelAttrGroupScale: 1,
+    customPanelGroupScale: 1,
     panelAttrGap: 4,
     panelAttrFontSize: 14,
     panelAttrColumnGap: 12,
@@ -111,6 +121,7 @@
     showSkillCdGroup: true,
     showResourceGroup: true,
     showPanelAttrGroup: true,
+    showCustomPanelGroup: true,
   };
 
   let cdMap = $state(new Map<number, SkillCdState>());
@@ -119,6 +130,7 @@
   let buffMap = $state(new Map<number, BuffUpdateState>());
   let activeBuffIds = $state(new Set<number>());
   let buffDurationPercents = $state(new Map<number, number>());
+  let counterMap = $state(new Map<number, CounterUpdateState>());
   let panelAttrMap = $state(new Map<number, number>());
   let buffDefinitions = $state(new Map<number, BuffDefinition>());
   let buffNameMap = $state(new Map<number, string>());
@@ -162,6 +174,19 @@
   const overlayVisibility = $derived(
     activeProfile?.overlayVisibility ?? DEFAULT_OVERLAY_VISIBILITY,
   );
+  const customPanelStyle = $derived.by(() => {
+    if (!activeProfile) {
+      return {
+        gap: 6,
+        columnGap: 12,
+        fontSize: 14,
+        nameColor: "#ffffff",
+        valueColor: "#ffffff",
+        progressColor: "#ffffff",
+      } satisfies CustomPanelStyle;
+    }
+    return ensureCustomPanelStyle(activeProfile);
+  });
   const monitoredPanelAttrs = $derived.by(() => {
     const current = activeProfile?.monitoredPanelAttrs ?? [];
     const currentMap = new Map(current.map((item) => [item.attrId, item]));
@@ -179,10 +204,45 @@
   const enabledPanelAttrs = $derived(
     monitoredPanelAttrs.filter((item) => item.enabled),
   );
+  const inlineBuffEntries = $derived.by(() => {
+    if (!activeProfile) return [];
+    return ensureInlineBuffEntries(activeProfile);
+  });
+  const inlineBuffIds = $derived.by(() =>
+    new Set(
+      inlineBuffEntries
+        .filter((entry) => entry.sourceType === "buff")
+        .map((entry) => entry.sourceId),
+    )
+  );
+  const panelAreaRows = $derived.by((): PanelAreaDisplayRow[] => {
+    if (!activeProfile) return [];
+    const rows = ensurePanelAreaRowOrder(activeProfile);
+    const result: PanelAreaDisplayRow[] = [];
+    for (const row of rows) {
+      const attr = enabledPanelAttrs.find((item) => item.attrId === row.attrId);
+      if (attr) {
+        result.push({ key: `attr_${attr.attrId}`, attr });
+      }
+    }
+    for (const attr of enabledPanelAttrs) {
+      if (!result.some((row) => row.attr.attrId === attr.attrId)) {
+        result.push({ key: `attr_${attr.attrId}`, attr });
+      }
+    }
+    return result;
+  });
   const specialBuffConfigMap = $derived.by(() => {
     const map = new Map<number, SpecialBuffDisplay>();
     for (const config of findSpecialBuffDisplays(selectedClassKey)) {
       map.set(config.buffBaseId, config);
+    }
+    return map;
+  });
+  const counterRuleMap = $derived.by(() => {
+    const map = new Map<number, ReturnType<typeof getCounterRules>[number]>();
+    for (const rule of getCounterRules()) {
+      map.set(rule.ruleId, rule);
     }
     return map;
   });
@@ -195,6 +255,7 @@
       textBuffPanel: current?.textBuffPanel ?? DEFAULT_OVERLAY_POSITIONS.textBuffPanel,
       specialBuffGroup: current?.specialBuffGroup ?? DEFAULT_OVERLAY_POSITIONS.specialBuffGroup,
       panelAttrGroup: current?.panelAttrGroup ?? DEFAULT_OVERLAY_POSITIONS.panelAttrGroup,
+      customPanelGroup: current?.customPanelGroup ?? DEFAULT_OVERLAY_POSITIONS.customPanelGroup,
       iconBuffPositions: current?.iconBuffPositions ?? {},
     };
   }
@@ -210,6 +271,8 @@
         current?.textBuffPanelScale ?? DEFAULT_OVERLAY_SIZES.textBuffPanelScale,
       panelAttrGroupScale:
         current?.panelAttrGroupScale ?? DEFAULT_OVERLAY_SIZES.panelAttrGroupScale,
+      customPanelGroupScale:
+        current?.customPanelGroupScale ?? DEFAULT_OVERLAY_SIZES.customPanelGroupScale,
       panelAttrGap:
         Math.max(0, Math.min(24, Math.round(current?.panelAttrGap ?? DEFAULT_OVERLAY_SIZES.panelAttrGap))),
       panelAttrFontSize:
@@ -235,6 +298,20 @@
         current?.showResourceGroup ?? DEFAULT_OVERLAY_VISIBILITY.showResourceGroup,
       showPanelAttrGroup:
         current?.showPanelAttrGroup ?? DEFAULT_OVERLAY_VISIBILITY.showPanelAttrGroup,
+      showCustomPanelGroup:
+        current?.showCustomPanelGroup ?? DEFAULT_OVERLAY_VISIBILITY.showCustomPanelGroup,
+    };
+  }
+
+  function ensureCustomPanelStyle(profile: SkillMonitorProfile): CustomPanelStyle {
+    const current = profile.customPanelStyle;
+    return {
+      gap: Math.max(0, Math.min(24, Math.round(current?.gap ?? 6))),
+      columnGap: Math.max(0, Math.min(240, Math.round(current?.columnGap ?? 12))),
+      fontSize: Math.max(10, Math.min(28, Math.round(current?.fontSize ?? 14))),
+      nameColor: current?.nameColor ?? "#ffffff",
+      valueColor: current?.valueColor ?? "#ffffff",
+      progressColor: current?.progressColor ?? "#ffffff",
     };
   }
 
@@ -246,6 +323,86 @@
       return value.toLocaleString();
     }
     return `${(value / 100).toFixed(2)}%`;
+  }
+
+  function getBuffRemainingMs(buff: BuffUpdateState | undefined, now: number): number {
+    if (!buff) return 0;
+    if (buff.durationMs <= 0) return Number.POSITIVE_INFINITY;
+    const end = buff.createTimeMs + buff.durationMs;
+    return Math.max(0, end - now);
+  }
+
+  function isBuffActive(buff: BuffUpdateState | undefined, now: number): boolean {
+    if (!buff) return false;
+    if (buff.durationMs <= 0) return true;
+    return buff.createTimeMs + buff.durationMs > now;
+  }
+
+  function formatTimerText(remainingMs: number): string {
+    if (!Number.isFinite(remainingMs)) return "∞";
+    if (remainingMs <= 0) return "--";
+    return `${(remainingMs / 1000).toFixed(1)}s`;
+  }
+
+  function getBuffRemainPercent(buff: BuffUpdateState | undefined, now: number): number {
+    if (!buff || buff.durationMs <= 0) return 0;
+    return Math.max(0, Math.min(100, (getBuffRemainingMs(buff, now) / buff.durationMs) * 100));
+  }
+
+  type CustomPanelDisplayRow = {
+    key: string;
+    label: string;
+    valueText: string;
+    progressPercent: number;
+    showProgress: boolean;
+  };
+
+  function getCustomPanelDisplayRow(entry: InlineBuffEntry, now: number): CustomPanelDisplayRow | null {
+    if (entry.sourceType === "buff") {
+      const buff = buffMap.get(entry.sourceId);
+      const active = isBuffActive(buff, now);
+      if (!active || !buff) return null;
+      const remainingMs = getBuffRemainingMs(buff, now);
+      const layer = Math.max(1, buff.layer);
+      return {
+        key: `buff_${entry.id}`,
+        label: entry.label,
+        valueText: layer > 1 ? `x${layer} ${formatTimerText(remainingMs)}` : formatTimerText(remainingMs),
+        progressPercent: getBuffRemainPercent(buff, now),
+        showProgress: buff.durationMs > 0,
+      };
+    }
+
+    const counter = counterMap.get(entry.sourceId);
+    const rule = counterRuleMap.get(entry.sourceId);
+    const linkedBuff = buffMap.get(counter?.linkedBuffId ?? rule?.linkedBuffId ?? -1);
+    const active = counter?.linkedBuffActive ?? isBuffActive(linkedBuff, now);
+    const remainingMs = getBuffRemainingMs(linkedBuff, now);
+    if (!counter) {
+      return {
+        key: `counter_${entry.id}`,
+        label: entry.label,
+        valueText: "--",
+        progressPercent: 0,
+        showProgress: false,
+      };
+    }
+    if (counter.isCounting) {
+      return {
+        key: `counter_${entry.id}`,
+        label: entry.label,
+        valueText: `${Math.max(0, counter.currentCount)}`,
+        progressPercent: 0,
+        showProgress: false,
+      };
+    }
+    return {
+      key: `counter_${entry.id}`,
+      label: entry.label,
+      valueText: active ? `冷却中 ${formatTimerText(remainingMs)}` : "冷却中 --",
+      progressPercent: getBuffRemainPercent(linkedBuff, now),
+      showProgress: active && Boolean(linkedBuff && linkedBuff.durationMs > 0),
+    };
   }
 
   function ensureBuffGroups(profile: SkillMonitorProfile): BuffGroup[] {
@@ -286,6 +443,41 @@
       showTime: group.showTime ?? true,
       showLayer: group.showLayer ?? true,
     };
+  }
+
+  function ensureInlineBuffEntries(profile: SkillMonitorProfile): InlineBuffEntry[] {
+    return (profile.inlineBuffEntries ?? []).map((entry, idx) => ({
+      id: entry.id ?? `inline_${idx + 1}`,
+      sourceType: entry.sourceType ?? "buff",
+      sourceId: entry.sourceId,
+      label: entry.label ?? (entry.sourceType === "counter" ? `计数器 ${entry.sourceId}` : `Buff ${entry.sourceId}`),
+      format: entry.format ?? "timer",
+      color: entry.color ?? "#ffffff",
+    }));
+  }
+
+  function samePanelRowRef(a: PanelAreaRowRef, b: PanelAreaRowRef): boolean {
+    return a.attrId === b.attrId;
+  }
+
+  function ensurePanelAreaRowOrder(profile: SkillMonitorProfile): PanelAreaRowRef[] {
+    const enabledAttrIds = monitoredPanelAttrs
+      .filter((item) => item.enabled)
+      .map((item) => item.attrId);
+    const attrIdSet = new Set(enabledAttrIds);
+    const rows: PanelAreaRowRef[] = [];
+    for (const row of profile.panelAreaRowOrder ?? []) {
+      if (!attrIdSet.has(row.attrId)) continue;
+      if (!rows.some((item) => samePanelRowRef(item, row))) {
+        rows.push({ type: "attr", attrId: row.attrId });
+      }
+    }
+    for (const attrId of enabledAttrIds) {
+      if (!rows.some((row) => row.type === "attr" && row.attrId === attrId)) {
+        rows.push({ type: "attr", attrId });
+      }
+    }
+    return rows;
   }
 
   function updateActiveProfile(
@@ -700,6 +892,15 @@
     return specials.filter((buff) => selectedIds.has(buff.baseId));
   });
   const limitedTextBuffs = $derived.by(() => textBuffs.slice(0, textBuffMaxVisible));
+  const customPanelRows = $derived.by(() => {
+    const now = Date.now();
+    const rows: CustomPanelDisplayRow[] = [];
+    for (const entry of inlineBuffEntries) {
+      const row = getCustomPanelDisplayRow(entry, now);
+      if (row) rows.push(row);
+    }
+    return rows;
+  });
 
   function updateDisplay() {
     const now = Date.now();
@@ -709,6 +910,9 @@
     const nextTextBuffs: TextBuffDisplay[] = [];
 
     for (const [baseId, buff] of buffMap) {
+      if (inlineBuffIds.has(baseId)) {
+        continue;
+      }
       const end = buff.createTimeMs + buff.durationMs;
       const remaining = Math.max(0, end - now);
       const remainPercent =
@@ -829,6 +1033,7 @@
         !activeProfile.overlayVisibility ||
         !activeProfile.buffDisplayMode ||
         !activeProfile.buffGroups ||
+        !activeProfile.customPanelStyle ||
         !activeProfile.textBuffMaxVisible)
     ) {
       updateActiveProfile((profile) => ({
@@ -839,6 +1044,7 @@
         buffDisplayMode: profile.buffDisplayMode ?? "individual",
         buffGroups: ensureBuffGroups(profile),
         individualMonitorAllGroup: ensureIndividualMonitorAllGroup(profile),
+        customPanelStyle: ensureCustomPanelStyle(profile),
         textBuffMaxVisible: Math.max(1, Math.min(20, profile.textBuffMaxVisible ?? 10)),
       }));
     }
@@ -872,6 +1078,14 @@
       void loadBuffNames(Array.from(next.keys()));
     });
 
+    const unlistenCounter = onBuffCounterUpdate((event) => {
+      const next = new Map<number, CounterUpdateState>();
+      for (const counter of event.payload.counters) {
+        next.set(counter.ruleId, counter);
+      }
+      counterMap = next;
+    });
+
     const unlisten = onSkillCdUpdate((event) => {
       const next = new Map(cdMap);
       for (const cd of event.payload.skillCds) {
@@ -903,6 +1117,7 @@
     return () => {
       unlistenEditToggle.then((fn) => fn());
       unlistenBuff.then((fn) => fn());
+      unlistenCounter.then((fn) => fn());
       unlisten.then((fn) => fn());
       unlistenRes.then((fn) => fn());
       unlistenPanelAttr.then((fn) => fn());
@@ -1057,7 +1272,7 @@
     </div>
   {/if}
 
-  {#if overlayVisibility.showPanelAttrGroup && enabledPanelAttrs.length > 0}
+  {#if overlayVisibility.showPanelAttrGroup && panelAreaRows.length > 0}
     <div
       class="overlay-group panel-attr-group"
       class:editable={isEditing}
@@ -1074,24 +1289,21 @@
         class="panel-attr-list"
         style:gap={`${getOverlaySizes().panelAttrGap}px`}
       >
-        {#each enabledPanelAttrs as attr (attr.attrId)}
-          <div
-            class="panel-attr-row"
-            style:gap={`${getOverlaySizes().panelAttrColumnGap}px`}
-          >
+        {#each panelAreaRows as row (row.key)}
+          <div class="panel-attr-row" style:gap={`${getOverlaySizes().panelAttrColumnGap}px`}>
             <span
               class="panel-attr-label"
-              style:color={attr.color}
+              style:color={row.attr.color}
               style:font-size={`${getOverlaySizes().panelAttrFontSize}px`}
             >
-              {attr.label}
+              {row.attr.label}
             </span>
             <span
               class="panel-attr-value"
-              style:color={attr.color}
+              style:color={row.attr.color}
               style:font-size={`${Math.max(10, getOverlaySizes().panelAttrFontSize + 2)}px`}
             >
-              {formatAttrValue(panelAttrMap.get(attr.attrId) ?? 0, attr.format)}
+              {formatAttrValue(panelAttrMap.get(row.attr.attrId) ?? 0, row.attr.format)}
             </span>
           </div>
         {/each}
@@ -1101,6 +1313,60 @@
           class="resize-handle"
           onpointerdown={(e) =>
             startResize(e, { kind: "group", key: "panelAttrGroupScale" }, getGroupScale("panelAttrGroupScale"))}
+        ></div>
+      {/if}
+    </div>
+  {/if}
+
+  {#if overlayVisibility.showCustomPanelGroup && (customPanelRows.length > 0 || isEditing)}
+    <div
+      class="overlay-group custom-panel-group"
+      class:editable={isEditing}
+      style:left={`${getGroupPosition("customPanelGroup").x}px`}
+      style:top={`${getGroupPosition("customPanelGroup").y}px`}
+      style:transform={`scale(${getGroupScale("customPanelGroupScale")})`}
+      style:transform-origin="top left"
+      onpointerdown={(e) => startDrag(e, { kind: "group", key: "customPanelGroup" }, getGroupPosition("customPanelGroup"))}
+    >
+      {#if isEditing}
+        <div class="group-tag">自定义面板区</div>
+      {/if}
+      <div class="custom-panel-list" style:gap={`${customPanelStyle.gap}px`}>
+        {#each customPanelRows as row (row.key)}
+          <div class="custom-panel-row">
+            <div class="custom-panel-main" style:gap={`${customPanelStyle.columnGap}px`}>
+              <span
+                class="custom-panel-label"
+                style:font-size={`${customPanelStyle.fontSize}px`}
+                style:color={customPanelStyle.nameColor}
+              >
+                {row.label}
+              </span>
+              <span
+                class="custom-panel-value"
+                style:font-size={`${Math.max(10, customPanelStyle.fontSize + 2)}px`}
+                style:color={customPanelStyle.valueColor}
+              >
+                {row.valueText}
+              </span>
+            </div>
+            {#if row.showProgress}
+              <div class="custom-panel-progress">
+                <div
+                  class="custom-panel-progress-fill"
+                  style:width={`${row.progressPercent}%`}
+                  style:background={customPanelStyle.progressColor}
+                ></div>
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+      {#if isEditing}
+        <div
+          class="resize-handle"
+          onpointerdown={(e) =>
+            startResize(e, { kind: "group", key: "customPanelGroupScale" }, getGroupScale("customPanelGroupScale"))}
         ></div>
       {/if}
     </div>
@@ -1439,6 +1705,8 @@
 
   .skill-group.editable,
   .resource-group.editable,
+  .panel-attr-group.editable,
+  .custom-panel-group.editable,
   .text-buff-panel.editable {
     border: 2px solid rgba(102, 204, 255, 0.9);
     border-radius: 10px;
@@ -1686,6 +1954,57 @@
     text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
   }
 
+  .custom-panel-group {
+    min-width: 220px;
+  }
+
+  .custom-panel-list {
+    display: flex;
+    flex-direction: column;
+    min-width: 220px;
+  }
+
+  .custom-panel-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .custom-panel-main {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  .custom-panel-label {
+    font-weight: 600;
+    line-height: 1;
+    text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .custom-panel-value {
+    font-weight: 700;
+    line-height: 1;
+    text-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .custom-panel-progress {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.2);
+    overflow: hidden;
+  }
+
+  .custom-panel-progress-fill {
+    height: 100%;
+    transition: width 100ms linear;
+  }
+
   .icon-buff-cell {
     display: flex;
     flex-direction: column;
@@ -1757,12 +2076,6 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-  }
-
-  .text-buff-title {
-    font-size: 12px;
-    font-weight: 700;
-    color: #ffffff;
   }
 
   .text-buff-row {

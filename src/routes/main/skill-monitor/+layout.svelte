@@ -5,6 +5,7 @@
   import ExternalLinkIcon from "virtual:icons/lucide/external-link";
   import PlayIcon from "virtual:icons/lucide/play";
   import PenSquareIcon from "virtual:icons/lucide/pen-square";
+  import ProfileSwitcher from "./profile-switcher.svelte";
 
   let { children } = $props();
 
@@ -77,6 +78,8 @@
       </button>
     </div>
   </div>
+
+  <ProfileSwitcher />
 
   <div class="min-h-0">
     {@render children()}

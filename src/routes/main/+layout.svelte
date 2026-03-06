@@ -8,10 +8,10 @@
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { goto } from "$app/navigation";
   import { SETTINGS } from '$lib/settings-store';
-  import { commands } from "$lib/bindings";
+  import { commands, type CounterRule } from "$lib/bindings";
   import { setMonitoredPanelAttrs } from "$lib/api";
   import { applyCustomFonts } from "$lib/font-loader";
-  import { getDefaultMonitoredBuffIds } from "$lib/skill-mappings";
+  import { getCounterRules, getDefaultMonitoredBuffIds } from "$lib/skill-mappings";
   import { onMount } from 'svelte';
   import ToolSidebar from "./tool-sidebar.svelte";
   import ChangelogModal from '$lib/components/ChangelogModal.svelte';
@@ -46,6 +46,10 @@
     const monitoredSkillIds = activeProfile?.monitoredSkillIds ?? [];
     const monitoredBuffIds = activeProfile?.monitoredBuffIds ?? [];
     const monitoredPanelAttrs = activeProfile?.monitoredPanelAttrs ?? [];
+    const inlineBuffEntries = activeProfile?.inlineBuffEntries ?? [];
+    const inlineCounterRuleIds = inlineBuffEntries
+      .filter((entry) => entry.sourceType === "counter")
+      .map((entry) => entry.sourceId);
     const buffPriorityIds = activeProfile?.buffPriorityIds ?? [];
     const buffDisplayMode = activeProfile?.buffDisplayMode ?? "individual";
     const buffGroups = activeProfile?.buffGroups ?? [];
@@ -57,11 +61,20 @@
       buffDisplayMode === "grouped"
         ? buffGroups.flatMap((group) => (group.monitorAll ? [] : group.buffIds))
         : [];
+    const inlineBuffIds = inlineBuffEntries
+      .filter((entry) => entry.sourceType === "buff")
+      .map((entry) => entry.sourceId);
+    const activeCounterRuleIds = inlineCounterRuleIds;
+    const counterLinkedBuffIds = getCounterRules()
+      .filter((rule) => activeCounterRuleIds.includes(rule.ruleId))
+      .map((rule) => rule.linkedBuffId);
     const defaultLinkedBuffIds = getDefaultMonitoredBuffIds(selectedClass);
     const mergedBuffIds = Array.from(
       new Set([
         ...monitoredBuffIds,
         ...groupBuffIds,
+        ...inlineBuffIds,
+        ...counterLinkedBuffIds,
         ...defaultLinkedBuffIds,
       ]),
     );
@@ -74,6 +87,16 @@
     const monitoredPanelAttrIds = monitoredPanelAttrs
       .filter((item) => item.enabled)
       .map((item) => item.attrId);
+    const enabledCounterRules: CounterRule[] = getCounterRules()
+      .filter((rule) => activeCounterRuleIds.includes(rule.ruleId))
+      .map((rule) => ({
+        ruleId: rule.ruleId,
+        trigger: rule.trigger,
+        linkedBuffId: rule.linkedBuffId,
+        threshold: rule.threshold,
+        onBuffAdd: rule.onBuffAdd,
+        onBuffRemove: rule.onBuffRemove,
+      }));
     const monitorSyncKey = JSON.stringify({
       enabled,
       monitoredSkillIds,
@@ -81,6 +104,7 @@
       mergedPriorityIds,
       monitoredPanelAttrIds,
       anyGroupMonitorAll,
+      activeCounterRuleIds,
     });
 
     void (async () => {
@@ -94,12 +118,14 @@
             await commands.setMonitoredBuffs(mergedBuffIds);
             await commands.setBuffPriority(mergedPriorityIds);
             await setMonitoredPanelAttrs(monitoredPanelAttrIds);
+            await commands.setBuffCounterRules(enabledCounterRules);
           } else {
             await commands.setMonitorAllBuff(false);
             await commands.setMonitoredSkills([]);
             await commands.setMonitoredBuffs([]);
             await commands.setBuffPriority([]);
             await setMonitoredPanelAttrs([]);
+            await commands.setBuffCounterRules([]);
           }
         }
 
