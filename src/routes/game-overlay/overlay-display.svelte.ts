@@ -1,5 +1,10 @@
 import { findSpecialBuffDisplays, getCounterRules } from "$lib/skill-mappings";
-import { resolveBuffDisplayName } from "$lib/config/buff-name-table";
+import {
+  getBuffCategoryLabel,
+  getBuffIdsByCategory,
+  resolveBuffCategoryKey,
+  resolveBuffDisplayName,
+} from "$lib/config/buff-name-table";
 import type { CustomPanelDisplayRow, IconBuffDisplay, SkillDisplay, TextBuffDisplay } from "./overlay-types";
 import {
   buildBuffTextRow,
@@ -16,9 +21,11 @@ import {
   activeProfile,
   buffAliases,
   buffDisplayMode,
+  expandedMonitoredBuffIds,
   enabledPanelAttrs,
   inlineBuffEntries,
   inlineBuffIds,
+  monitoredBuffCategories,
   monitoredBuffIds,
   selectedClassKey,
   textBuffMaxVisible,
@@ -86,15 +93,54 @@ const _groupedIconBuffs = $derived.by(() => {
 
 const _individualModeIconBuffs = $derived.by(() => {
   if (buffDisplayMode() !== "individual") return [];
-  const selected = new Set(monitoredBuffIds());
-  return overlayRuntime.iconDisplayBuffs.filter((buff) =>
+  const selected = new Set(expandedMonitoredBuffIds());
+  const explicitSelected = new Set(monitoredBuffIds());
+  const selectedCategories = monitoredBuffCategories();
+  const visibleBuffs = overlayRuntime.iconDisplayBuffs.filter((buff) =>
     selected.has(buff.baseId),
   );
+  const explicitBuffs = visibleBuffs
+    .filter((buff) => explicitSelected.has(buff.baseId))
+    .map((buff) => ({
+      ...buff,
+      layoutKey: `buff:${buff.baseId}`,
+    }));
+  const categoryBuffs: IconBuffDisplay[] = [];
+  for (const categoryKey of selectedCategories) {
+    const activeCategoryBuff = visibleBuffs.find((buff) =>
+      !explicitSelected.has(buff.baseId) &&
+      resolveBuffCategoryKey(buff.baseId) === categoryKey
+    );
+    if (activeCategoryBuff) {
+      categoryBuffs.push({
+        ...activeCategoryBuff,
+        layoutKey: `category:${categoryKey}`,
+        categoryKey,
+      });
+      continue;
+    }
+    if (!overlayRuntime.isEditing) continue;
+    const representativeId = getBuffIdsByCategory(categoryKey)[0];
+    if (representativeId === undefined) continue;
+    const definition = buffDefinitions().get(representativeId);
+    if (!definition?.spriteFile) continue;
+    categoryBuffs.push({
+      baseId: representativeId,
+      name: getBuffCategoryLabel(categoryKey),
+      spriteFile: definition.spriteFile,
+      text: "--",
+      layer: 1,
+      isPlaceholder: true,
+      layoutKey: `category:${categoryKey}`,
+      categoryKey,
+    });
+  }
+  return [...explicitBuffs, ...categoryBuffs];
 });
 
 const _individualAllGroupBuffs = $derived.by(() => {
   if (buffDisplayMode() !== "individual" || !_individualMonitorAllGroup) return [];
-  const selected = new Set(monitoredBuffIds());
+  const selected = new Set(expandedMonitoredBuffIds());
   return overlayRuntime.iconDisplayBuffs.filter(
     (buff) =>
       !selected.has(buff.baseId) &&
@@ -184,7 +230,7 @@ export function getResourcePreciseValue(index: number): number {
 
 export function updateDisplay() {
   const now = Date.now();
-  const selectedBuffIds = monitoredBuffIds();
+  const explicitSelectedBuffIds = monitoredBuffIds();
   const buffDefinitionsMap = buffDefinitions();
   const skippedInlineBuffIds = inlineBuffIds();
   const currentBuffAliases = buffAliases();
@@ -250,7 +296,7 @@ export function updateDisplay() {
   if (overlayRuntime.isEditing) {
     const iconIds = new Set(nextIconBuffs.map((buff) => buff.baseId));
     const textIds = new Set(nextTextBuffs.map((buff) => buff.key));
-    for (const baseId of selectedBuffIds) {
+    for (const baseId of explicitSelectedBuffIds) {
       if (iconIds.has(baseId) || textIds.has(`buff_${baseId}`)) continue;
       const definition = buffDefinitionsMap.get(baseId);
       const name = resolveBuffDisplayName(baseId, currentBuffAliases);

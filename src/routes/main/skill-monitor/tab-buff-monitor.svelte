@@ -1,7 +1,12 @@
 <script lang="ts">
   import ChevronDown from "virtual:icons/lucide/chevron-down";
   import BuffSearchResultGrid from "./BuffSearchResultGrid.svelte";
-  import type { BuffDefinition, BuffNameInfo } from "$lib/config/buff-name-table";
+  import type {
+    BuffCategoryDefinition,
+    BuffCategoryKey,
+    BuffDefinition,
+    BuffNameInfo,
+  } from "$lib/config/buff-name-table";
   import type {
     BuffDisplayMode,
     BuffGroup,
@@ -12,8 +17,12 @@
     buffSearch: string;
     filteredBuffs: BuffNameInfo[];
     monitoredBuffIds: number[];
+    monitoredBuffCategories: BuffCategoryKey[];
+    expandedSelectedBuffIds: number[];
     selectedBuffs: BuffDefinition[];
+    selectedBuffCategories: BuffCategoryDefinition[];
     availableBuffs: BuffDefinition[];
+    buffCategoryDefinitions: BuffCategoryDefinition[];
     availableBuffMap: Map<number, BuffDefinition>;
     buffAliasSectionExpanded: boolean;
     setBuffAliasSectionExpanded: (expanded: boolean) => void;
@@ -29,7 +38,9 @@
     setBuffAlias: (buffId: number, alias: string) => void;
     resetBuffAlias: (buffId: number) => void;
     isBuffSelected: (buffId: number) => boolean;
+    isBuffCategorySelected: (categoryKey: BuffCategoryKey) => boolean;
     toggleBuff: (buffId: number) => void;
+    toggleBuffCategory: (categoryKey: BuffCategoryKey) => void;
     clearBuffs: () => void;
     setBuffSearch: (value: string) => void;
 
@@ -65,6 +76,8 @@
     setGroupPrioritySearchKeyword: (groupId: string, value: string) => void;
     getGroupPrioritySearchResults: (group: BuffGroup) => BuffNameInfo[];
     getGroupPriorityIds: (group: BuffGroup) => number[];
+    toggleBuffCategoryInGroup: (groupId: string, categoryKey: BuffCategoryKey) => void;
+    hasCompleteBuffCategoryInGroup: (group: BuffGroup, categoryKey: BuffCategoryKey) => boolean;
     toggleBuffInGroup: (groupId: string, buffId: number) => void;
     togglePriorityInGroup: (groupId: string, buffId: number) => void;
     moveGroupPriority: (groupId: string, buffId: number, direction: "up" | "down") => void;
@@ -74,8 +87,12 @@
     buffSearch,
     filteredBuffs,
     monitoredBuffIds,
+    monitoredBuffCategories,
+    expandedSelectedBuffIds,
     selectedBuffs,
+    selectedBuffCategories,
     availableBuffs,
+    buffCategoryDefinitions,
     availableBuffMap,
     buffAliasSectionExpanded,
     setBuffAliasSectionExpanded,
@@ -91,7 +108,9 @@
     setBuffAlias,
     resetBuffAlias,
     isBuffSelected,
+    isBuffCategorySelected,
     toggleBuff,
+    toggleBuffCategory,
     clearBuffs,
     setBuffSearch,
     buffDisplayMode,
@@ -123,6 +142,8 @@
     setGroupPrioritySearchKeyword,
     getGroupPrioritySearchResults,
     getGroupPriorityIds,
+    toggleBuffCategoryInGroup,
+    hasCompleteBuffCategoryInGroup,
     toggleBuffInGroup,
     togglePriorityInGroup,
     moveGroupPriority,
@@ -137,7 +158,9 @@
         <p class="text-xs text-muted-foreground">统一通过 Buff 名称搜索（含有图标/无图标 Buff）</p>
       </div>
       <div class="flex items-center gap-3">
-        <div class="text-xs text-muted-foreground">已选 {monitoredBuffIds.length}</div>
+        <div class="text-xs text-muted-foreground">
+          已选 Buff {monitoredBuffIds.length} / 分类 {monitoredBuffCategories.length}
+        </div>
         <button
           type="button"
           class="text-xs px-2 py-1 rounded border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
@@ -411,7 +434,7 @@
         <div class="grid grid-cols-[repeat(auto-fill,minmax(50px,1fr))] gap-2">
           {#each globalPrioritySearchResults as item (item.baseId)}
             {@const iconBuff = availableBuffMap.get(item.baseId)}
-            {#if monitoredBuffIds.includes(item.baseId) && !buffPriorityIds.includes(item.baseId)}
+            {#if expandedSelectedBuffIds.includes(item.baseId) && !buffPriorityIds.includes(item.baseId)}
               <button
                 type="button"
                 class="rounded border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors p-1"
@@ -443,6 +466,43 @@
   </div>
 
   {#if buffDisplayMode === "individual"}
+    <div class="rounded-lg border border-border/60 bg-card/40 p-4 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
+      <div>
+        <h2 class="text-base font-semibold text-foreground">分类快捷监听</h2>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        {#each buffCategoryDefinitions as category (category.key)}
+          <button
+            type="button"
+            class="px-3 py-2 rounded-lg text-sm font-medium border transition-colors {isBuffCategorySelected(category.key)
+              ? 'bg-primary text-primary-foreground border-primary'
+              : 'bg-muted/30 text-foreground border-border/60 hover:bg-muted/50'}"
+            onclick={() => toggleBuffCategory(category.key)}
+          >
+            {category.label} ({category.count})
+          </button>
+        {/each}
+      </div>
+      <div class="space-y-2">
+        <div class="text-xs text-muted-foreground">已选分类</div>
+        <div class="flex flex-wrap gap-2">
+          {#if selectedBuffCategories.length > 0}
+            {#each selectedBuffCategories as category (category.key)}
+              <button
+                type="button"
+                class="rounded-md border border-primary/60 bg-primary/10 px-3 py-1.5 text-xs text-foreground hover:bg-primary/15"
+                onclick={() => toggleBuffCategory(category.key)}
+              >
+                {category.label} ({category.count})
+              </button>
+            {/each}
+          {:else}
+            <div class="text-xs text-muted-foreground">尚未选择任何分类监听</div>
+          {/if}
+        </div>
+      </div>
+    </div>
+
     <div class="rounded-lg border border-border/60 bg-card/40 p-4 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
       <div class="flex items-center justify-between gap-3">
         <div>
@@ -533,6 +593,20 @@
             </div>
 
             <div class="space-y-2">
+              <div class="flex flex-wrap gap-2">
+                {#each buffCategoryDefinitions as category (category.key)}
+                  <button
+                    type="button"
+                    class="rounded-md border px-3 py-1.5 text-xs transition-colors {hasCompleteBuffCategoryInGroup(group, category.key)
+                      ? 'border-primary/60 bg-primary/10 text-foreground'
+                      : 'border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground'}"
+                    onclick={() => toggleBuffCategoryInGroup(group.id, category.key)}
+                    disabled={group.monitorAll}
+                  >
+                    {hasCompleteBuffCategoryInGroup(group, category.key) ? "移除" : "添加"}{category.label} ({category.count})
+                  </button>
+                {/each}
+              </div>
               <input
                 class="w-full sm:w-72 rounded border border-border/60 bg-muted/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                 placeholder="搜索并添加到此分组"

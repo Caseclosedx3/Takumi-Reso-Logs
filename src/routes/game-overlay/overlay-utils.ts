@@ -48,6 +48,7 @@ export function ensureOverlayPositions(
     customPanelGroup:
       current?.customPanelGroup ?? DEFAULT_OVERLAY_POSITIONS.customPanelGroup,
     iconBuffPositions: current?.iconBuffPositions ?? {},
+    categoryIconPositions: current?.categoryIconPositions ?? {},
   };
 }
 
@@ -81,6 +82,7 @@ export function ensureOverlaySizes(profile: SkillMonitorProfile): OverlaySizes {
       240,
     ),
     iconBuffSizes: current?.iconBuffSizes ?? {},
+    categoryIconSizes: current?.categoryIconSizes ?? {},
   };
 }
 

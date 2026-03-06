@@ -1,6 +1,7 @@
 import buffNameRaw from "./BuffName.json";
 
 export type BuffAliasMap = Record<string, string>;
+export type BuffCategoryKey = "food" | "alchemy";
 
 export type BuffDefinition = {
   baseId: number;
@@ -20,7 +21,15 @@ export type BuffMeta = {
   defaultName: string;
   hasSpriteFile: boolean;
   spriteFile: string | null;
+  iconKey: string | null;
+  categories: BuffCategoryKey[];
   searchKeywords: string[];
+};
+
+export type BuffCategoryDefinition = {
+  key: BuffCategoryKey;
+  label: string;
+  count: number;
 };
 
 type RawBuffEntry = {
@@ -34,21 +43,55 @@ const rawBuffEntries = buffNameRaw as RawBuffEntry[];
 
 const BUFF_META_MAP = new Map<number, BuffMeta>();
 const AVAILABLE_BUFF_DEFINITIONS: BuffDefinition[] = [];
+const BUFF_CATEGORY_CATALOG: Record<
+  BuffCategoryKey,
+  { label: string; buffIds: number[] }
+> = {
+  food: { label: "食物", buffIds: [] },
+  alchemy: { label: "炼金", buffIds: [] },
+};
+
+function resolveBuffCategories(
+  defaultName: string,
+  iconKey: string | null,
+): BuffCategoryKey[] {
+  const categories: BuffCategoryKey[] = [];
+  if (
+    iconKey?.startsWith("buff_food_up") &&
+    (defaultName.startsWith("物攻") || defaultName.startsWith("魔攻"))
+  ) {
+    categories.push("food");
+  }
+  if (
+    iconKey?.startsWith("buff_agentia_up") &&
+    defaultName.startsWith("元素强度")
+  ) {
+    categories.push("alchemy");
+  }
+  return categories;
+}
 
 for (const entry of rawBuffEntries) {
   const defaultName = entry.NameDesign?.trim() ?? "";
   if (!defaultName) continue;
 
+  const iconKey = entry.Icon?.trim() || null;
   const spriteFile = entry.SpriteFile?.trim() || null;
+  const categories = resolveBuffCategories(defaultName, iconKey);
   const searchKeywords = [defaultName];
   const meta: BuffMeta = {
     baseId: entry.Id,
     defaultName,
     hasSpriteFile: Boolean(spriteFile),
     spriteFile,
+    iconKey,
+    categories,
     searchKeywords,
   };
   BUFF_META_MAP.set(entry.Id, meta);
+  for (const category of categories) {
+    BUFF_CATEGORY_CATALOG[category].buffIds.push(entry.Id);
+  }
 
   if (spriteFile) {
     AVAILABLE_BUFF_DEFINITIONS.push({
@@ -61,9 +104,24 @@ for (const entry of rawBuffEntries) {
 }
 
 AVAILABLE_BUFF_DEFINITIONS.sort((a, b) => a.baseId - b.baseId);
+for (const category of Object.values(BUFF_CATEGORY_CATALOG)) {
+  category.buffIds.sort((a, b) => a - b);
+}
 
 function normalizeText(value: string): string {
   return value.trim().toLowerCase();
+}
+
+export function normalizeBuffCategoryKeys(
+  categories?: BuffCategoryKey[] | null,
+): BuffCategoryKey[] {
+  const normalized = new Set<BuffCategoryKey>();
+  for (const category of categories ?? []) {
+    if (category === "food" || category === "alchemy") {
+      normalized.add(category);
+    }
+  }
+  return Array.from(normalized);
 }
 
 function normalizeAliasMap(aliases?: BuffAliasMap): BuffAliasMap {
@@ -107,6 +165,44 @@ export function lookupDefaultBuffName(baseId: number): string | undefined {
 
 export function getAvailableBuffDefinitions(): BuffDefinition[] {
   return AVAILABLE_BUFF_DEFINITIONS;
+}
+
+export function getBuffCategoryDefinitions(): BuffCategoryDefinition[] {
+  return (Object.entries(BUFF_CATEGORY_CATALOG) as Array<
+    [BuffCategoryKey, { label: string; buffIds: number[] }]
+  >).map(([key, category]) => ({
+    key,
+    label: category.label,
+    count: category.buffIds.length,
+  }));
+}
+
+export function getBuffIdsByCategory(category: BuffCategoryKey): number[] {
+  return [...(BUFF_CATEGORY_CATALOG[category]?.buffIds ?? [])];
+}
+
+export function getBuffCategoryLabel(category: BuffCategoryKey): string {
+  return BUFF_CATEGORY_CATALOG[category]?.label ?? category;
+}
+
+export function resolveBuffCategoryKey(
+  baseId: number,
+): BuffCategoryKey | undefined {
+  return lookupBuffMeta(baseId)?.categories[0];
+}
+
+export function expandBuffSelection(
+  buffIds: number[],
+  categories?: BuffCategoryKey[] | null,
+): number[] {
+  return Array.from(
+    new Set([
+      ...buffIds,
+      ...normalizeBuffCategoryKeys(categories).flatMap((category) =>
+        getBuffIdsByCategory(category),
+      ),
+    ]),
+  );
 }
 
 export function resolveBuffDisplayName(

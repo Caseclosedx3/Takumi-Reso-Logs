@@ -10,6 +10,7 @@
   import { SETTINGS } from '$lib/settings-store';
   import { commands, type CounterRule } from "$lib/bindings";
   import { setMonitoredPanelAttrs } from "$lib/api";
+  import { expandBuffSelection } from "$lib/config/buff-name-table";
   import { applyCustomFonts } from "$lib/font-loader";
   import { getCounterRules, getDefaultMonitoredBuffIds } from "$lib/skill-mappings";
   import { onMount } from 'svelte';
@@ -44,13 +45,18 @@
     const activeProfile = getActiveSkillMonitorProfile();
     const selectedClass = activeProfile?.selectedClass ?? "wind_knight";
     const monitoredSkillIds = activeProfile?.monitoredSkillIds ?? [];
-    const monitoredBuffIds = activeProfile?.monitoredBuffIds ?? [];
+    const monitoredBuffIds = expandBuffSelection(
+      activeProfile?.monitoredBuffIds ?? [],
+      activeProfile?.monitoredBuffCategories,
+    );
     const monitoredPanelAttrs = activeProfile?.monitoredPanelAttrs ?? [];
     const inlineBuffEntries = activeProfile?.inlineBuffEntries ?? [];
     const inlineCounterRuleIds = inlineBuffEntries
       .filter((entry) => entry.sourceType === "counter")
       .map((entry) => entry.sourceId);
-    const buffPriorityIds = activeProfile?.buffPriorityIds ?? [];
+    const buffPriorityIds = (activeProfile?.buffPriorityIds ?? []).filter((id) =>
+      monitoredBuffIds.includes(id),
+    );
     const buffDisplayMode = activeProfile?.buffDisplayMode ?? "individual";
     const buffGroups = activeProfile?.buffGroups ?? [];
     const individualAllGroup = activeProfile?.individualMonitorAllGroup ?? null;

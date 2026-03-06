@@ -3,6 +3,7 @@ import type {
   OverlaySizes,
   PanelAttrConfig,
 } from "$lib/settings-store";
+import type { BuffCategoryKey } from "$lib/config/buff-name-table";
 
 export type SkillDisplay = {
   isActive: boolean;
@@ -17,6 +18,8 @@ export type IconBuffDisplay = {
   spriteFile: string;
   text: string;
   layer: number;
+  layoutKey?: string;
+  categoryKey?: BuffCategoryKey;
   isPlaceholder?: boolean;
   specialImages?: string[];
 };
@@ -39,8 +42,12 @@ export type PanelAreaDisplayRow = {
 };
 
 export type DragTarget =
-  | { kind: "group"; key: keyof Omit<OverlayPositions, "iconBuffPositions"> }
+  | {
+      kind: "group";
+      key: keyof Omit<OverlayPositions, "iconBuffPositions" | "categoryIconPositions">;
+    }
   | { kind: "iconBuff"; baseId: number }
+  | { kind: "categoryIcon"; categoryKey: BuffCategoryKey }
   | { kind: "buffGroup"; groupId: string }
   | { kind: "individualAllGroup" };
 
@@ -52,8 +59,12 @@ export type DragState = {
 };
 
 export type ResizeTarget =
-  | { kind: "group"; key: keyof Omit<OverlaySizes, "iconBuffSizes"> }
+  | {
+      kind: "group";
+      key: keyof Omit<OverlaySizes, "iconBuffSizes" | "categoryIconSizes">;
+    }
   | { kind: "iconBuff"; baseId: number }
+  | { kind: "categoryIcon"; categoryKey: BuffCategoryKey }
   | { kind: "buffGroup"; groupId: string }
   | { kind: "individualAllGroup" };
 

@@ -3,6 +3,7 @@
  * It uses `@tauri-store/svelte` to create persistent stores for user settings.
  */
 import { RuneStore } from '@tauri-store/svelte';
+import type { BuffCategoryKey } from "./config/buff-name-table";
 
 export const DEFAULT_STATS = {
   totalDmg: true,
@@ -118,6 +119,7 @@ export type OverlayPositions = {
   panelAttrGroup: Point;
   customPanelGroup: Point;
   iconBuffPositions: Record<number, Point>;
+  categoryIconPositions?: Partial<Record<BuffCategoryKey, Point>>;
 };
 
 export type OverlaySizes = {
@@ -130,6 +132,7 @@ export type OverlaySizes = {
   panelAttrFontSize: number;
   panelAttrColumnGap: number;
   iconBuffSizes: Record<number, number>;
+  categoryIconSizes?: Partial<Record<BuffCategoryKey, number>>;
 };
 
 export type OverlayVisibility = {
@@ -191,6 +194,7 @@ export type SkillMonitorProfile = {
   selectedClass: string;
   monitoredSkillIds: number[];
   monitoredBuffIds: number[];
+  monitoredBuffCategories?: BuffCategoryKey[];
   monitoredPanelAttrs: PanelAttrConfig[];
   buffPriorityIds: number[];
   buffDisplayMode: BuffDisplayMode;
@@ -227,6 +231,7 @@ function createDefaultOverlayPositions(): OverlayPositions {
     panelAttrGroup: { x: 700, y: 40 },
     customPanelGroup: { x: 700, y: 280 },
     iconBuffPositions: {},
+    categoryIconPositions: {},
   };
 }
 
@@ -241,6 +246,7 @@ function createDefaultOverlaySizes(): OverlaySizes {
     panelAttrFontSize: 14,
     panelAttrColumnGap: 12,
     iconBuffSizes: {},
+    categoryIconSizes: {},
   };
 }
 
@@ -302,6 +308,7 @@ export function createDefaultSkillMonitorProfile(
     selectedClass: classKey,
     monitoredSkillIds: [],
     monitoredBuffIds: [],
+    monitoredBuffCategories: [],
     monitoredPanelAttrs: AVAILABLE_PANEL_ATTRS.map((item) => ({ ...item })),
     buffPriorityIds: [],
     buffDisplayMode: "individual",

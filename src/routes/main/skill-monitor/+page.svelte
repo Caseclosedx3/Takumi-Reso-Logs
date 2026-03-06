@@ -6,10 +6,16 @@
   import TabCustomPanel from "./tab-custom-panel.svelte";
   import TabOverlay from "./tab-overlay.svelte";
   import {
+    expandBuffSelection,
     getAvailableBuffDefinitions,
+    getBuffCategoryDefinitions,
+    getBuffIdsByCategory,
     lookupDefaultBuffName,
+    normalizeBuffCategoryKeys,
     resolveBuffDisplayName,
     searchBuffsByName,
+    type BuffCategoryKey,
+    type BuffCategoryDefinition,
     type BuffDefinition,
     type BuffNameInfo,
   } from "$lib/config/buff-name-table";
@@ -37,6 +43,7 @@
   } from "$lib/skill-mappings";
 
   const availableBuffs = getAvailableBuffDefinitions();
+  const buffCategoryDefinitions = getBuffCategoryDefinitions();
   let buffSearch = $state("");
   let buffSearchResults = $state<BuffNameInfo[]>([]);
   let globalPrioritySearch = $state("");
@@ -74,6 +81,12 @@
   const classSkills = $derived(getSkillsByClass(selectedClassKey));
   const monitoredSkillIds = $derived(activeProfile.monitoredSkillIds);
   const monitoredBuffIds = $derived(activeProfile.monitoredBuffIds);
+  const monitoredBuffCategories = $derived.by(() =>
+    normalizeBuffCategoryKeys(activeProfile.monitoredBuffCategories),
+  );
+  const expandedSelectedBuffIds = $derived.by(() =>
+    expandBuffSelection(monitoredBuffIds, monitoredBuffCategories),
+  );
   const monitoredPanelAttrs = $derived.by(() => ensurePanelAttrs(activeProfile));
   const panelAttrGap = $derived(
     Math.max(0, Math.min(24, Math.round(activeProfile.overlaySizes?.panelAttrGap ?? 4))),
@@ -109,6 +122,11 @@
   );
   const buffGroups = $derived.by(() => ensureBuffGroups(activeProfile));
   const individualMonitorAllGroup = $derived.by(() => ensureIndividualMonitorAllGroup(activeProfile));
+  const selectedBuffCategories = $derived.by<BuffCategoryDefinition[]>(() =>
+    buffCategoryDefinitions.filter((category) =>
+      monitoredBuffCategories.includes(category.key),
+    ),
+  );
   const configuredBuffAliasIds = $derived.by(() =>
     Object.keys(buffAliases)
       .map((baseId) => Number(baseId))
@@ -116,7 +134,7 @@
       .sort((a, b) => a - b),
   );
   const buffPriorityIds = $derived.by(() => {
-    const selected = new Set(monitoredBuffIds);
+    const selected = new Set(expandedSelectedBuffIds);
     return uniqueIds((activeProfile.buffPriorityIds ?? []).filter((id) => selected.has(id)));
   });
   const textBuffMaxVisible = $derived(
@@ -357,8 +375,18 @@
     updateActiveProfile((profile) => ({
       ...profile,
       monitoredBuffIds: [],
+      monitoredBuffCategories: [],
       buffPriorityIds: [],
     }));
+  }
+
+  function filterPriorityIdsForSelection(
+    profile: SkillMonitorProfile,
+    nextBuffIds: number[],
+    nextCategories: BuffCategoryKey[],
+  ): number[] {
+    const expandedIds = new Set(expandBuffSelection(nextBuffIds, nextCategories));
+    return uniqueIds((profile.buffPriorityIds ?? []).filter((id) => expandedIds.has(id)));
   }
 
   function setResonanceSearch(value: string) {
@@ -418,10 +446,15 @@
     const current = monitoredBuffIds;
     const exists = current.includes(buffId);
     if (exists) {
+      const nextBuffIds = current.filter((id) => id !== buffId);
       updateActiveProfile((profile) => ({
         ...profile,
-        monitoredBuffIds: current.filter((id) => id !== buffId),
-        buffPriorityIds: (profile.buffPriorityIds ?? []).filter((id) => id !== buffId),
+        monitoredBuffIds: nextBuffIds,
+        buffPriorityIds: filterPriorityIdsForSelection(
+          profile,
+          nextBuffIds,
+          normalizeBuffCategoryKeys(profile.monitoredBuffCategories),
+        ),
       }));
       return;
     }
@@ -429,6 +462,24 @@
       ...profile,
       monitoredBuffIds: [...current, buffId],
     }));
+  }
+
+  function toggleBuffCategory(categoryKey: BuffCategoryKey) {
+    updateActiveProfile((profile) => {
+      const current = normalizeBuffCategoryKeys(profile.monitoredBuffCategories);
+      const nextCategories = current.includes(categoryKey)
+        ? current.filter((key) => key !== categoryKey)
+        : [...current, categoryKey];
+      return {
+        ...profile,
+        monitoredBuffCategories: nextCategories,
+        buffPriorityIds: filterPriorityIdsForSelection(
+          profile,
+          profile.monitoredBuffIds ?? [],
+          nextCategories,
+        ),
+      };
+    });
   }
 
   function toggleGlobalPriority(buffId: number) {
@@ -444,6 +495,10 @@
 
   function isBuffSelected(buffId: number): boolean {
     return monitoredBuffIds.includes(buffId);
+  }
+
+  function isBuffCategorySelected(categoryKey: BuffCategoryKey): boolean {
+    return monitoredBuffCategories.includes(categoryKey);
   }
 
   const filteredBuffs = $derived.by(() => {
@@ -919,6 +974,39 @@
     });
   }
 
+  function toggleBuffCategoryInGroup(groupId: string, categoryKey: BuffCategoryKey) {
+    const categoryBuffIds = getBuffIdsByCategory(categoryKey);
+    if (categoryBuffIds.length === 0) return;
+    updateBuffGroup(groupId, (group) => {
+      const hasCompleteCategory = categoryBuffIds.every((buffId) =>
+        group.buffIds.includes(buffId),
+      );
+      if (hasCompleteCategory) {
+        const categoryBuffIdSet = new Set(categoryBuffIds);
+        return {
+          ...group,
+          buffIds: group.buffIds.filter((buffId) => !categoryBuffIdSet.has(buffId)),
+          priorityBuffIds: group.priorityBuffIds.filter(
+            (buffId) => !categoryBuffIdSet.has(buffId),
+          ),
+        };
+      }
+      return {
+        ...group,
+        buffIds: uniqueIds([...group.buffIds, ...categoryBuffIds]),
+      };
+    });
+  }
+
+  function hasCompleteBuffCategoryInGroup(
+    group: BuffGroup,
+    categoryKey: BuffCategoryKey,
+  ): boolean {
+    const categoryBuffIds = getBuffIdsByCategory(categoryKey);
+    return categoryBuffIds.length > 0
+      && categoryBuffIds.every((buffId) => group.buffIds.includes(buffId));
+  }
+
   function togglePriorityInGroup(groupId: string, buffId: number) {
     updateBuffGroup(groupId, (group) => {
       const exists = group.priorityBuffIds.includes(buffId);
@@ -1026,8 +1114,12 @@
       {buffSearch}
       {filteredBuffs}
       {monitoredBuffIds}
+      {monitoredBuffCategories}
+      {expandedSelectedBuffIds}
       {selectedBuffs}
+      {selectedBuffCategories}
       {availableBuffs}
+      {buffCategoryDefinitions}
       {availableBuffMap}
       {buffAliasSectionExpanded}
       {setBuffAliasSectionExpanded}
@@ -1043,7 +1135,9 @@
       {setBuffAlias}
       {resetBuffAlias}
       {isBuffSelected}
+      {isBuffCategorySelected}
       {toggleBuff}
+      {toggleBuffCategory}
       {clearBuffs}
       {setBuffSearch}
       {buffDisplayMode}
@@ -1075,6 +1169,8 @@
       {setGroupPrioritySearchKeyword}
       {getGroupPrioritySearchResults}
       {getGroupPriorityIds}
+      {toggleBuffCategoryInGroup}
+      {hasCompleteBuffCategoryInGroup}
       {toggleBuffInGroup}
       {togglePriorityInGroup}
       {moveGroupPriority}

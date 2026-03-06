@@ -7,6 +7,11 @@ import {
   type PanelAttrConfig,
   type TextBuffPanelStyle,
 } from "$lib/settings-store";
+import {
+  expandBuffSelection,
+  normalizeBuffCategoryKeys,
+  type BuffCategoryKey,
+} from "$lib/config/buff-name-table";
 import { DEFAULT_OVERLAY_VISIBILITY } from "./overlay-constants";
 import {
   ensureCustomPanelStyle,
@@ -39,6 +44,12 @@ const _monitoredSkillIds = $derived.by(
 );
 const _monitoredBuffIds = $derived.by(
   () => _activeProfile?.monitoredBuffIds ?? [],
+);
+const _monitoredBuffCategories = $derived.by<BuffCategoryKey[]>(() =>
+  normalizeBuffCategoryKeys(_activeProfile?.monitoredBuffCategories),
+);
+const _expandedMonitoredBuffIds = $derived.by(() =>
+  expandBuffSelection(_monitoredBuffIds, _monitoredBuffCategories),
 );
 const _buffDisplayMode = $derived.by(
   () => _activeProfile?.buffDisplayMode ?? "individual",
@@ -107,6 +118,14 @@ export function monitoredSkillIds() {
 
 export function monitoredBuffIds() {
   return _monitoredBuffIds;
+}
+
+export function monitoredBuffCategories() {
+  return _monitoredBuffCategories;
+}
+
+export function expandedMonitoredBuffIds() {
+  return _expandedMonitoredBuffIds;
 }
 
 export function buffDisplayMode() {

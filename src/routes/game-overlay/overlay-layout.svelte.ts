@@ -2,9 +2,10 @@ import {
   DEFAULT_OVERLAY_POSITIONS,
   DEFAULT_OVERLAY_SIZES,
 } from "./overlay-constants";
+import { type BuffCategoryKey } from "$lib/config/buff-name-table";
 import { activeProfile, updateActiveProfile } from "./overlay-profile.svelte.js";
 import { iconDisplayBuffs, overlayRuntime } from "./overlay-runtime.svelte.js";
-import type { DragTarget, ResizeTarget } from "./overlay-types";
+import type { DragTarget, IconBuffDisplay, ResizeTarget } from "./overlay-types";
 import {
   ensureBuffGroups,
   ensureIndividualMonitorAllGroup,
@@ -14,9 +15,12 @@ import {
 
 type OverlayPositionKey = keyof Omit<
   typeof DEFAULT_OVERLAY_POSITIONS,
-  "iconBuffPositions"
+  "iconBuffPositions" | "categoryIconPositions"
 >;
-type OverlaySizeKey = keyof Omit<typeof DEFAULT_OVERLAY_SIZES, "iconBuffSizes">;
+type OverlaySizeKey = keyof Omit<
+  typeof DEFAULT_OVERLAY_SIZES,
+  "iconBuffSizes" | "categoryIconSizes"
+>;
 
 function clampGroupScale(value: number) {
   return Math.max(0.5, Math.min(2.5, value));
@@ -109,6 +113,29 @@ export function getIconBuffPosition(baseId: number) {
   };
 }
 
+export function getCategoryIconPosition(
+  categoryKey: BuffCategoryKey,
+  fallbackIndex = 0,
+) {
+  const positions = getOverlayPositions();
+  const cached = positions.categoryIconPositions?.[categoryKey];
+  if (cached) return cached;
+  return {
+    x: 40 + (fallbackIndex % 8) * 58,
+    y: 310 + Math.floor(fallbackIndex / 8) * 64,
+  };
+}
+
+export function getDisplayIconPosition(
+  buff: IconBuffDisplay,
+  fallbackIndex = 0,
+) {
+  if (buff.categoryKey) {
+    return getCategoryIconPosition(buff.categoryKey, fallbackIndex);
+  }
+  return getIconBuffPosition(buff.baseId);
+}
+
 export function getGroupScale(
   key: OverlaySizeKey,
 ): number {
@@ -128,6 +155,17 @@ export function setGroupScale(
 
 export function getIconBuffSize(baseId: number): number {
   return getOverlaySizes().iconBuffSizes[baseId] ?? 44;
+}
+
+export function getCategoryIconSize(categoryKey: BuffCategoryKey): number {
+  return getOverlaySizes().categoryIconSizes?.[categoryKey] ?? 44;
+}
+
+export function getDisplayIconSize(buff: IconBuffDisplay): number {
+  if (buff.categoryKey) {
+    return getCategoryIconSize(buff.categoryKey);
+  }
+  return getIconBuffSize(buff.baseId);
 }
 
 export function setIconBuffSize(baseId: number, value: number) {
@@ -164,6 +202,19 @@ export function setIconBuffPosition(
   }));
 }
 
+export function setCategoryIconPosition(
+  categoryKey: BuffCategoryKey,
+  nextPos: { x: number; y: number },
+) {
+  updateOverlayPositions((positions) => ({
+    ...positions,
+    categoryIconPositions: {
+      ...(positions.categoryIconPositions ?? {}),
+      [categoryKey]: nextPos,
+    },
+  }));
+}
+
 export function setBuffGroupPosition(
   groupId: string,
   nextPos: { x: number; y: number },
@@ -196,6 +247,17 @@ export function setIndividualAllGroupIconSize(value: number) {
   updateIndividualAllGroup((group) => ({
     ...group,
     iconSize: nextValue,
+  }));
+}
+
+export function setCategoryIconSize(categoryKey: BuffCategoryKey, value: number) {
+  const nextValue = clampIconSize(value);
+  updateOverlaySizes((sizes) => ({
+    ...sizes,
+    categoryIconSizes: {
+      ...(sizes.categoryIconSizes ?? {}),
+      [categoryKey]: nextValue,
+    },
   }));
 }
 
@@ -248,6 +310,11 @@ export function onGlobalPointerMove(e: PointerEvent) {
         overlayRuntime.resizeState.target.groupId,
         overlayRuntime.resizeState.startValue + delta / 2,
       );
+    } else if (overlayRuntime.resizeState.target.kind === "categoryIcon") {
+      setCategoryIconSize(
+        overlayRuntime.resizeState.target.categoryKey,
+        overlayRuntime.resizeState.startValue + delta / 2,
+      );
     } else {
       setIconBuffSize(
         overlayRuntime.resizeState.target.baseId,
@@ -282,6 +349,8 @@ export function onGlobalPointerMove(e: PointerEvent) {
     setIndividualAllGroupPosition(nextPos);
   } else if (overlayRuntime.dragState.target.kind === "buffGroup") {
     setBuffGroupPosition(overlayRuntime.dragState.target.groupId, nextPos);
+  } else if (overlayRuntime.dragState.target.kind === "categoryIcon") {
+    setCategoryIconPosition(overlayRuntime.dragState.target.categoryKey, nextPos);
   } else {
     setIconBuffPosition(overlayRuntime.dragState.target.baseId, nextPos);
   }

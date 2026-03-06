@@ -25,6 +25,7 @@ export const DEFAULT_OVERLAY_POSITIONS: OverlayPositions = {
   panelAttrGroup: { x: 700, y: 40 },
   customPanelGroup: { x: 700, y: 280 },
   iconBuffPositions: {},
+  categoryIconPositions: {},
 };
 
 export const DEFAULT_OVERLAY_SIZES: OverlaySizes = {
@@ -37,6 +38,7 @@ export const DEFAULT_OVERLAY_SIZES: OverlaySizes = {
   panelAttrFontSize: 14,
   panelAttrColumnGap: 12,
   iconBuffSizes: {},
+  categoryIconSizes: {},
 };
 
 export const DEFAULT_OVERLAY_VISIBILITY: OverlayVisibility = {

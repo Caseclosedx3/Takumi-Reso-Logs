@@ -2,8 +2,8 @@
   import BuffGroupGrid from "./BuffGroupGrid.svelte";
   import IconBuffCell from "./IconBuffCell.svelte";
   import {
-    getIconBuffPosition,
-    getIconBuffSize,
+    getDisplayIconPosition,
+    getDisplayIconSize,
     individualAllGroupBuffs,
     individualModeIconBuffs,
     individualMonitorAllGroup,
@@ -18,9 +18,9 @@
   const allGroupBuffs = $derived(individualAllGroupBuffs());
 </script>
 
-{#each individualBuffs as buff (buff.baseId)}
-  {@const iconPos = getIconBuffPosition(buff.baseId)}
-  {@const iconSize = getIconBuffSize(buff.baseId)}
+{#each individualBuffs as buff, idx (buff.layoutKey ?? `buff:${buff.baseId}`)}
+  {@const iconPos = getDisplayIconPosition(buff, idx)}
+  {@const iconSize = getDisplayIconSize(buff)}
   <IconBuffCell
     {buff}
     {iconSize}
@@ -28,9 +28,22 @@
     editable={editing}
     left={iconPos.x}
     top={iconPos.y}
-    onPointerDown={(e) => startDrag(e, { kind: "iconBuff", baseId: buff.baseId }, iconPos)}
+    onPointerDown={(e) =>
+      startDrag(
+        e,
+        buff.categoryKey
+          ? { kind: "categoryIcon", categoryKey: buff.categoryKey }
+          : { kind: "iconBuff", baseId: buff.baseId },
+        iconPos,
+      )}
     onResizePointerDown={(e) =>
-      startResize(e, { kind: "iconBuff", baseId: buff.baseId }, iconSize)}
+      startResize(
+        e,
+        buff.categoryKey
+          ? { kind: "categoryIcon", categoryKey: buff.categoryKey }
+          : { kind: "iconBuff", baseId: buff.baseId },
+        iconSize,
+      )}
   />
 {/each}
 
