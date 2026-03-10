@@ -34,8 +34,16 @@ pub enum CaptureMethod {
     Npcap(String),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PacketFormat {
+    RawIp,
+    Ethernet,
+    Unsupported,
+}
+
 trait PacketSource: Send {
     fn next_packet(&mut self) -> Result<Option<Vec<u8>>, String>;
+    fn packet_format(&self) -> PacketFormat;
 }
 
 struct WinDivertSource {
@@ -68,6 +76,10 @@ impl PacketSource for WinDivertSource {
             .map(|packet| Some(packet.data.to_vec()))
             .map_err(|e| e.to_string())
     }
+
+    fn packet_format(&self) -> PacketFormat {
+        PacketFormat::RawIp
+    }
 }
 
 struct NpcapSource {
@@ -81,16 +93,20 @@ impl NpcapSource {
         Ok(Self { capture })
     }
 
-    fn strip_l2(&self, data: &[u8]) -> Option<Vec<u8>> {
+    fn packet_format_for_datalink(&self) -> PacketFormat {
         match self.capture.datalink() {
-            DLT_EN10MB => {
-                if data.len() > 14 && data[12] == 0x08 && data[13] == 0x00 {
-                    Some(data[14..].to_vec())
-                } else {
-                    None
-                }
+            DLT_EN10MB => PacketFormat::Ethernet,
+            DLT_RAW | DLT_NULL | DLT_LOOP => PacketFormat::RawIp,
+            other => {
+                log_unsupported_datalink(other);
+                PacketFormat::Unsupported
             }
-            DLT_RAW => Some(data.to_vec()),
+        }
+    }
+
+    fn normalize_packet(&self, data: Vec<u8>) -> Option<Vec<u8>> {
+        match self.capture.datalink() {
+            DLT_EN10MB | DLT_RAW => Some(data),
             DLT_NULL | DLT_LOOP => {
                 if data.len() <= 4 {
                     return None;
@@ -100,26 +116,13 @@ impl NpcapSource {
                     2 => Some(data[4..].to_vec()), // AF_INET on Windows
                     23 | 24 => None,               // IPv6 families, ignored for now
                     other => {
-                        static LOGGED_FAMILY: OnceLock<u32> = OnceLock::new();
-                        if LOGGED_FAMILY.set(other).is_ok() {
-                            warn!(
-                                "Unsupported DLT_NULL/LOOP family {} (datalink {}), dropping packets",
-                                other,
-                                self.capture.datalink()
-                            );
-                        }
+                        log_unsupported_loopback_family(other, self.capture.datalink());
                         None
                     }
                 }
             }
             other => {
-                static LOGGED_DLT: OnceLock<i32> = OnceLock::new();
-                if LOGGED_DLT.set(other).is_ok() {
-                    warn!(
-                        "Unsupported Npcap datalink type {}, dropping packets",
-                        other
-                    );
-                }
+                log_unsupported_datalink(other);
                 None
             }
         }
@@ -129,9 +132,33 @@ impl NpcapSource {
 impl PacketSource for NpcapSource {
     fn next_packet(&mut self) -> Result<Option<Vec<u8>>, String> {
         match self.capture.next_packet()? {
-            Some(data) => Ok(self.strip_l2(&data)),
+            Some(data) => Ok(self.normalize_packet(data)),
             None => Ok(None),
         }
+    }
+
+    fn packet_format(&self) -> PacketFormat {
+        self.packet_format_for_datalink()
+    }
+}
+
+fn log_unsupported_loopback_family(family: u32, datalink: i32) {
+    static LOGGED_FAMILY: OnceLock<u32> = OnceLock::new();
+    if LOGGED_FAMILY.set(family).is_ok() {
+        warn!(
+            "Unsupported DLT_NULL/LOOP family {} (datalink {}), dropping packets",
+            family, datalink
+        );
+    }
+}
+
+fn log_unsupported_datalink(datalink: i32) {
+    static LOGGED_DLT: OnceLock<i32> = OnceLock::new();
+    if LOGGED_DLT.set(datalink).is_ok() {
+        warn!(
+            "Unsupported Npcap datalink type {}, dropping packets",
+            datalink
+        );
     }
 }
 
@@ -237,7 +264,13 @@ fn read_packets(
         };
 
         // info!("{}", line!());
-        let Ok(network_slices) = SlicedPacket::from_ip(&packet_data) else {
+        let packet_format = source.packet_format();
+        let network_slices = match packet_format {
+            PacketFormat::RawIp => SlicedPacket::from_ip(&packet_data),
+            PacketFormat::Ethernet => SlicedPacket::from_ethernet(&packet_data),
+            PacketFormat::Unsupported => continue,
+        };
+        let Ok(network_slices) = network_slices else {
             continue; // if it's not ip, go next packet
         };
         // info!("{}", line!());
