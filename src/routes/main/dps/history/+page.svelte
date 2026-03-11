@@ -49,13 +49,11 @@
 
 	function toggleSelectAll() {
 		if (allSelected) {
-			// Deselect all visible
 			const visibleIds = new Set(encounters.map((e) => e.id));
 			selectedIds = new Set(
 				[...selectedIds].filter((id) => !visibleIds.has(id)),
 			);
 		} else {
-			// Select all visible
 			selectedIds = new Set([
 				...selectedIds,
 				...encounters.map((e) => e.id),
@@ -95,10 +93,9 @@
 			if (res.status === "ok") {
 				selectedIds = new Set();
 				showDeleteModal = false;
-				// Reload encounters
 				await loadEncounters(page);
 			} else {
-				errorMsg = `删除失败：${res.error}`;
+				errorMsg = `Delete failed: ${res.error}`;
 			}
 		} catch (e) {
 			console.error("Delete error", e);
@@ -185,7 +182,6 @@
 				errorMsg = null;
 				page = p;
 
-				// Persist pagination in the URL so browser back/forward restores it.
 				const sp = buildHistorySearchParams({ page: p, pageSize });
 				await goto(`/main/dps/history?${sp.toString()}`, {
 					replaceState: true,
@@ -232,7 +228,6 @@
 		loadEncounters(0);
 	}
 
-
 	function removePlayerNameFilter(playerName: string) {
 		selectedPlayerNames = selectedPlayerNames.filter(
 			(name) => name !== playerName,
@@ -259,7 +254,6 @@
 		loadBossNames();
 		loadSceneNames();
 
-		// Restore pagination from query params (e.g. /main/dps/history?page=4&pageSize=10)
 		const initialPage = parseNonNegativeInt(
 			$pageStore.url.searchParams.get("page"),
 			0,
@@ -302,8 +296,6 @@
 	}
 
 	async function onView(enc: EncounterSummaryDto) {
-		// Carry the current pagination state into the detail URL so the
-		// in-app "back" button can return you to the same page.
 		goto(`/main/dps/history/${enc.id}${$pageStore.url.search}`);
 	}
 </script>
@@ -338,7 +330,7 @@
 				class="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border transition-colors text-sm {showFavoritesOnly
 					? 'bg-yellow-500/10 border-yellow-500/50 text-yellow-500'
 					: 'bg-popover text-muted-foreground hover:bg-muted/40 hover:text-foreground'}"
-				title="仅显示收藏"
+				title="Show favorites only"
 			>
 				<svg
 					class="w-4 h-4"
@@ -353,7 +345,7 @@
 						d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
 					/>
 				</svg>
-				<span>收藏</span>
+				<span>Favorites</span>
 			</button>
 
 			<!-- Clear All Filters Button -->
@@ -361,9 +353,9 @@
 				<button
 					onclick={clearAllFilters}
 					class="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-destructive transition-colors"
-					title="清除所有筛选"
+					title="Clear all filters"
 				>
-					清除全部
+					Clear All
 				</button>
 			{/if}
 		</div>
@@ -375,14 +367,14 @@
 					<span
 						class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-yellow-500/10 text-yellow-500 leading-tight border border-yellow-500/30"
 					>
-						<span>仅收藏</span>
+						<span>Favorites only</span>
 						<button
 							onclick={() => {
 								showFavoritesOnly = false;
 								loadEncounters(0);
 							}}
 							class="hover:text-yellow-600 transition-colors"
-							aria-label="移除收藏筛选"
+							aria-label="Remove favorites filter"
 						>
 							✕
 						</button>
@@ -392,12 +384,12 @@
 					<span
 						class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-popover text-muted-foreground leading-tight border border-border/60"
 					>
-						<span class="text-muted-foreground/70">首领：</span>
+						<span class="text-muted-foreground/70">Boss:</span>
 						{boss}
 						<button
 							onclick={() => removeBossFilter(boss)}
 							class="text-muted-foreground/70 hover:text-destructive transition-colors"
-							aria-label={`移除 ${boss} 筛选`}
+							aria-label={`Remove ${boss} filter`}
 						>
 							✕
 						</button>
@@ -407,12 +399,12 @@
 					<span
 						class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-popover text-muted-foreground leading-tight border border-border/60"
 					>
-						<span class="text-muted-foreground/70">玩家：</span>
+						<span class="text-muted-foreground/70">Player:</span>
 						{player}
 						<button
 							onclick={() => removePlayerNameFilter(player)}
 							class="text-muted-foreground/70 hover:text-destructive transition-colors"
-							aria-label={`移除 ${player} 筛选`}
+							aria-label={`Remove ${player} filter`}
 						>
 							✕
 						</button>
@@ -422,12 +414,12 @@
 					<span
 						class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-popover text-muted-foreground leading-tight border border-border/60"
 					>
-						<span class="text-muted-foreground/70">场景：</span>
+						<span class="text-muted-foreground/70">Scene:</span>
 						{encounter}
 						<button
 							onclick={() => removeBossFilter(encounter)}
 							class="text-muted-foreground/70 hover:text-destructive transition-colors"
-							aria-label={`移除 ${encounter} 筛选`}
+							aria-label={`Remove ${encounter} filter`}
 						>
 							✕
 						</button>
@@ -445,7 +437,7 @@
 				onclick={() => loadEncounters(page)}
 				class="text-neutral-400 hover:text-neutral-200 transition-colors"
 				disabled={isRefreshing}
-				aria-label="刷新战斗列表"
+				aria-label="Refresh encounter list"
 			>
 				<svg
 					class:animate-spin={isRefreshing}
@@ -481,10 +473,8 @@
 									  )
 									? 'bg-primary/50 border-primary'
 									: 'border-border hover:border-primary/50'}"
-							aria-label={allSelected
-								? "取消全选"
-								: "全选"}
-							title={allSelected ? "取消全选" : "全选"}
+							aria-label={allSelected ? "Deselect all" : "Select all"}
+							title={allSelected ? "Deselect all" : "Select all"}
 						>
 							{#if allSelected}
 								<svg
@@ -523,19 +513,19 @@
 					>
 					<th
 						class="px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground w-80"
-						>战斗</th
+						>Encounter</th
 					>
 					<th
 						class="px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground w-[400px]"
-						>玩家</th
+						>Players</th
 					>
 					<th
 						class="px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground w-12"
-						>时长</th
+						>Duration</th
 					>
 					<th
 						class="px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground w-48"
-						>日期</th
+						>Date</th
 					>
 				</tr>
 			</thead>
@@ -558,8 +548,8 @@
 									? 'bg-primary border-primary'
 									: 'border-border hover:border-primary/50'}"
 								aria-label={selectedIds.has(enc.id)
-									? "取消选择"
-									: "选择"}
+									? "Deselect"
+									: "Select"}
 							>
 								{#if selectedIds.has(enc.id)}
 									<svg
@@ -592,7 +582,7 @@
 									{:else}
 										<span
 											class="text-muted-foreground text-xs opacity-70"
-											>无场景</span
+											>No Scene</span
 										>
 									{/if}
 								</div>
@@ -608,7 +598,7 @@
 									{:else}
 										<span
 											class="inline-block text-muted-foreground text-xs opacity-70 py-0.5 px-1.5"
-											>无 Boss</span
+											>No Boss</span
 										>
 									{/if}
 								</div>
@@ -666,7 +656,7 @@
 	<!-- Pagination controls -->
 	<div class="flex items-center justify-between mt-4 gap-4">
 		<div class="flex items-center gap-3 text-sm text-muted-foreground">
-			<span>每页行数：</span>
+			<span>Rows per page:</span>
 			<input
 				type="number"
 				bind:value={pageSize}
@@ -676,7 +666,7 @@
 				onchange={() => loadEncounters(0)}
 			/>
 			<span
-				>显示 {page * pageSize + 1} - {Math.min(
+				>Showing {page * pageSize + 1} - {Math.min(
 					(page + 1) * pageSize,
 					totalCount,
 				)} / {totalCount}</span
@@ -688,7 +678,7 @@
 				onclick={() => loadEncounters(0)}
 				disabled={page === 0}
 				class="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-				aria-label="第一页"
+				aria-label="First page"
 			>
 				<svg
 					class="w-5 h-5"
@@ -709,7 +699,7 @@
 				onclick={() => loadEncounters(page - 1)}
 				disabled={page === 0}
 				class="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-				aria-label="上一页"
+				aria-label="Previous page"
 			>
 				<svg
 					class="w-5 h-5"
@@ -730,7 +720,7 @@
 				onclick={() => loadEncounters(page + 1)}
 				disabled={(page + 1) * pageSize >= totalCount}
 				class="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-				aria-label="下一页"
+				aria-label="Next page"
 			>
 				<svg
 					class="w-5 h-5"
@@ -752,7 +742,7 @@
 					loadEncounters(Math.floor((totalCount - 1) / pageSize))}
 				disabled={(page + 1) * pageSize >= totalCount}
 				class="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-				aria-label="最后一页"
+				aria-label="Last page"
 			>
 				<svg
 					class="w-5 h-5"
@@ -786,7 +776,7 @@
 					>{selectedIds.size}</span
 				>
 				<span class="text-muted-foreground"
-					>条记录已选择</span
+					>{selectedIds.size === 1 ? "record selected" : "records selected"}</span
 				>
 			</div>
 
@@ -797,7 +787,7 @@
 					onclick={clearSelection}
 					class="px-3 py-1.5 text-sm rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
 				>
-					清除
+					Clear
 				</button>
 				<button
 					onclick={openDeleteModal}
@@ -816,7 +806,7 @@
 							d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
 						/>
 					</svg>
-					删除
+					Delete
 				</button>
 			</div>
 		</div>
@@ -835,7 +825,7 @@
 		<button
 			class="absolute inset-0 bg-black/60 backdrop-blur-sm"
 			onclick={closeDeleteModal}
-			aria-label="关闭弹窗"
+			aria-label="Close dialog"
 		></button>
 
 		<!-- Modal Content -->
@@ -865,16 +855,16 @@
 						id="delete-modal-title"
 						class="text-lg font-semibold text-foreground"
 					>
-						删除 {selectedIds.size} 条记录
+						Delete {selectedIds.size} {selectedIds.size === 1 ? "Record" : "Records"}
 					</h3>
 					<p class="text-sm text-muted-foreground">
-						此操作无法撤销
+						This action cannot be undone
 					</p>
 				</div>
 			</div>
 
 			<p class="text-sm text-muted-foreground mb-6">
-				确认要永久删除{selectedIds.size === 1 ? "这条战斗记录" : "这些战斗记录"}吗？所有关联数据（包括玩家统计、技能统计、死亡事件等）都会被删除。
+				Are you sure you want to permanently delete {selectedIds.size === 1 ? "this encounter record" : "these encounter records"}? All associated data (including player stats, skill stats, death events, etc.) will be removed.
 			</p>
 
 			<div class="flex justify-end gap-3">
@@ -883,7 +873,7 @@
 					disabled={isDeleting}
 					class="px-4 py-2 text-sm rounded-md border border-border bg-popover text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 				>
-					取消
+					Cancel
 				</button>
 				<button
 					onclick={confirmDeleteSelected}
@@ -910,9 +900,9 @@
 								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
 							></path>
 						</svg>
-						正在删除...
+						Deleting...
 					{:else}
-						删除
+						Delete
 					{/if}
 				</button>
 			</div>
