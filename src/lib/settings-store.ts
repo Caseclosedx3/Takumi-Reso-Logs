@@ -93,24 +93,24 @@ export type PanelAttrConfig = {
 };
 
 export const AVAILABLE_PANEL_ATTRS: PanelAttrConfig[] = [
-  { attrId: 11720, label: "攻速", color: "#6ee7ff", enabled: false, format: "percent" },
-  { attrId: 11710, label: "暴击率", color: "#ff7a7a", enabled: false, format: "percent" },
-  { attrId: 11930, label: "急速", color: "#facc15", enabled: false, format: "percent" },
-  { attrId: 11780, label: "幸运", color: "#a78bfa", enabled: false, format: "percent" },
-  { attrId: 11940, label: "精通", color: "#60a5fa", enabled: false, format: "percent" },
-  { attrId: 11950, label: "全能", color: "#34d399", enabled: false, format: "percent" },
-  { attrId: 11760, label: "冷却缩减", color: "#f97316", enabled: false, format: "percent" },
-  { attrId: 11960, label: "冷却加速", color: "#38bdf8", enabled: false, format: "percent" },
-  { attrId: 11010, label: "力量", color: "#f87171", enabled: false, format: "integer" },
-  { attrId: 11020, label: "智力", color: "#818cf8", enabled: false, format: "integer" },
-  { attrId: 11030, label: "敏捷", color: "#4ade80", enabled: false, format: "integer" },
-  { attrId: 11330, label: "物理攻击", color: "#fb923c", enabled: false, format: "integer" },
-  { attrId: 11340, label: "魔法攻击", color: "#c084fc", enabled: false, format: "integer" },
-  { attrId: 11730, label: "施法速度", color: "#22d3ee", enabled: false, format: "percent" },
-  { attrId: 12510, label: "暴击伤害", color: "#f472b6", enabled: false, format: "percent" },
-  { attrId: 12530, label: "幸运伤害倍率", color: "#d8b4fe", enabled: false, format: "percent" },
-  { attrId: 12540, label: "格挡伤害减免", color: "#86efac", enabled: false, format: "percent" },
-  { attrId: 11970, label: "格挡", color: "#fbbf24", enabled: false, format: "percent" },
+  { attrId: 11720, label: "Attack Speed", color: "#6ee7ff", enabled: false, format: "percent" },
+  { attrId: 11710, label: "Crit Rate", color: "#ff7a7a", enabled: false, format: "percent" },
+  { attrId: 11930, label: "Haste", color: "#facc15", enabled: false, format: "percent" },
+  { attrId: 11780, label: "Lucky", color: "#a78bfa", enabled: false, format: "percent" },
+  { attrId: 11940, label: "Expertise", color: "#60a5fa", enabled: false, format: "percent" },
+  { attrId: 11950, label: "Versatility", color: "#34d399", enabled: false, format: "percent" },
+  { attrId: 11760, label: "CD Reduction", color: "#f97316", enabled: false, format: "percent" },
+  { attrId: 11960, label: "CD Acceleration", color: "#38bdf8", enabled: false, format: "percent" },
+  { attrId: 11010, label: "Strength", color: "#f87171", enabled: false, format: "integer" },
+  { attrId: 11020, label: "Intelligence", color: "#818cf8", enabled: false, format: "integer" },
+  { attrId: 11030, label: "Agility", color: "#4ade80", enabled: false, format: "integer" },
+  { attrId: 11330, label: "Physical ATK", color: "#fb923c", enabled: false, format: "integer" },
+  { attrId: 11340, label: "Magic ATK", color: "#c084fc", enabled: false, format: "integer" },
+  { attrId: 11730, label: "Cast Speed", color: "#22d3ee", enabled: false, format: "percent" },
+  { attrId: 12510, label: "Crit DMG", color: "#f472b6", enabled: false, format: "percent" },
+  { attrId: 12530, label: "Lucky DMG Mult", color: "#d8b4fe", enabled: false, format: "percent" },
+  { attrId: 12540, label: "Block DMG Reduction", color: "#86efac", enabled: false, format: "percent" },
+  { attrId: 11970, label: "Block", color: "#fbbf24", enabled: false, format: "percent" },
 ];
 
 export type OverlayPositions = {
@@ -291,7 +291,7 @@ function createDefaultTextBuffPanelStyle(): TextBuffPanelStyle {
 }
 
 export function createDefaultBuffGroup(
-  name = "新分组",
+  name = "New Group",
   index = 1,
 ): BuffGroup {
   return {
@@ -312,7 +312,7 @@ export function createDefaultBuffGroup(
 }
 
 export function createDefaultSkillMonitorProfile(
-  name = "默认方案",
+  name = "Default Profile",
   classKey = "wind_knight",
 ): SkillMonitorProfile {
   return {
@@ -455,11 +455,11 @@ export const DEFAULT_LIVE_TABLE_SETTINGS = {
 // (Header preset constants removed - header defaults inlined into DEFAULT_SETTINGS)
 
 export const FONT_SIZE_LABELS: Record<string, string> = {
-  xs: '超小',
-  sm: '小',
-  base: '标准',
-  lg: '大',
-  xl: '超大',
+  xs: 'Extra Small',
+  sm: 'Small',
+  base: 'Normal',
+  lg: 'Large',
+  xl: 'Extra Large',
 };
 
 // Default custom theme colors (based on dark theme)
@@ -515,28 +515,28 @@ export const DEFAULT_CUSTOM_THEME_COLORS: CustomThemeColors = {
 
 // Labels for custom theme color variables
 export const CUSTOM_THEME_COLOR_LABELS: Record<string, { label: string; description: string; category: string }> = {
-  backgroundMain: { label: '背景（主窗口）', description: '主窗口背景颜色', category: 'Base' },
-  backgroundLive: { label: '背景（实时）', description: '实时统计窗口背景颜色', category: 'Base' },
-  foreground: { label: '前景', description: '主要文本颜色', category: 'Base' },
-  surface: { label: '表面', description: '卡片、弹窗和面板的背景颜色', category: 'Surfaces' },
-  surfaceForeground: { label: '表面文本', description: '表面上的文本颜色', category: 'Surfaces' },
-  primary: { label: '主色', description: '主要强调色', category: 'Accents' },
-  primaryForeground: { label: '主色文本', description: '主色元素上的文本颜色', category: 'Accents' },
-  secondary: { label: '次色', description: '次要强调色', category: 'Accents' },
-  secondaryForeground: { label: '次色文本', description: '次色元素上的文本颜色', category: 'Accents' },
-  muted: { label: '柔和', description: '柔和/低调的背景颜色', category: 'Utility' },
-  mutedForeground: { label: '柔和文本', description: '低调的文本颜色', category: 'Utility' },
-  accent: { label: '强调', description: '高亮强调色', category: 'Accents' },
-  accentForeground: { label: '强调文本', description: '强调色元素上的文本颜色', category: 'Accents' },
-  destructive: { label: '破坏性', description: '错误/危险颜色', category: 'Utility' },
-  destructiveForeground: { label: '破坏性文本', description: '破坏性元素上的文本颜色', category: 'Utility' },
-  border: { label: '边框', description: '边框颜色', category: 'Utility' },
-  input: { label: '输入框', description: '输入框背景颜色', category: 'Utility' },
-  tableTextColor: { label: '表格文本', description: '实时表格中的文本颜色', category: 'Tables' },
-  tableAbbreviatedColor: { label: '后缀颜色', description: '表格中 K、M、% 后缀的颜色', category: 'Tables' },
-  tooltipBg: { label: '提示背景', description: '提示框背景颜色', category: 'Tooltip' },
-  tooltipBorder: { label: '提示边框', description: '提示框边框颜色', category: 'Tooltip' },
-  tooltipFg: { label: '提示文本', description: '提示框文本颜色', category: 'Tooltip' },
+  backgroundMain: { label: 'Background (Main Window)', description: 'Main window background color', category: 'Base' },
+  backgroundLive: { label: 'Background (Live)', description: 'Live stats window background color', category: 'Base' },
+  foreground: { label: 'Foreground', description: 'Primary text color', category: 'Base' },
+  surface: { label: 'Surface', description: 'Background color for cards, modals and panels', category: 'Surfaces' },
+  surfaceForeground: { label: 'Surface Text', description: 'Text color on surfaces', category: 'Surfaces' },
+  primary: { label: 'Primary', description: 'Primary accent color', category: 'Accents' },
+  primaryForeground: { label: 'Primary Text', description: 'Text color on primary elements', category: 'Accents' },
+  secondary: { label: 'Secondary', description: 'Secondary accent color', category: 'Accents' },
+  secondaryForeground: { label: 'Secondary Text', description: 'Text color on secondary elements', category: 'Accents' },
+  muted: { label: 'Muted', description: 'Muted/subdued background color', category: 'Utility' },
+  mutedForeground: { label: 'Muted Text', description: 'Subdued text color', category: 'Utility' },
+  accent: { label: 'Accent', description: 'Highlight accent color', category: 'Accents' },
+  accentForeground: { label: 'Accent Text', description: 'Text color on accent elements', category: 'Accents' },
+  destructive: { label: 'Destructive', description: 'Error/danger color', category: 'Utility' },
+  destructiveForeground: { label: 'Destructive Text', description: 'Text color on destructive elements', category: 'Utility' },
+  border: { label: 'Border', description: 'Border color', category: 'Utility' },
+  input: { label: 'Input', description: 'Input field background color', category: 'Utility' },
+  tableTextColor: { label: 'Table Text', description: 'Text color in live tables', category: 'Tables' },
+  tableAbbreviatedColor: { label: 'Suffix Color', description: 'Color of K, M, % suffixes in tables', category: 'Tables' },
+  tooltipBg: { label: 'Tooltip Background', description: 'Tooltip background color', category: 'Tooltip' },
+  tooltipBorder: { label: 'Tooltip Border', description: 'Tooltip border color', category: 'Tooltip' },
+  tooltipFg: { label: 'Tooltip Text', description: 'Tooltip text color', category: 'Tooltip' },
 };
 
 const DEFAULT_SETTINGS = {

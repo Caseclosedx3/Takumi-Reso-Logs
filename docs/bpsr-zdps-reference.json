@@ -1,0 +1,71 @@
+{
+  "_note": "Official EN class and skill names sourced from Blue-Protocol-Source/BPSR-ZDPS. Used as translation reference for resonance-logs-cn.",
+  "source": "https://github.com/Blue-Protocol-Source/BPSR-ZDPS",
+  "classes": {
+    "wind_knight": { "zh": "青岚骑士", "en": "Wind Knight" },
+    "frost_mage": { "zh": "冰法 / 冰魔导师", "en": "Frost Mage" },
+    "stormblade": { "zh": "雷影剑士", "en": "Stormblade" },
+    "verdant_oracle": { "zh": "森语者", "en": "Verdant Oracle" },
+    "heavy_guardian": { "zh": "巨刃守护者", "en": "Heavy Guardian" },
+    "marksman": { "zh": "神射手", "en": "Marksman" },
+    "shield_knight": { "zh": "神盾骑士", "en": "Shield Knight" },
+    "beat_performer": { "zh": "灵魂乐手", "en": "Beat Performer" }
+  },
+  "sub_professions": {
+    "Skyward": { "zh": "空枪", "en": "Skyward" },
+    "Block": { "zh": "格挡", "en": "Block" },
+    "Concerto": { "zh": "协奏", "en": "Concerto" },
+    "Falconry": { "zh": "鹰弓", "en": "Falconry" },
+    "Iaido": { "zh": "居合", "en": "Iaido" },
+    "Frostbeam": { "zh": "射线", "en": "Frostbeam" },
+    "Icicle": { "zh": "冰矛", "en": "Icicle" },
+    "Lifebind": { "zh": "愈合", "en": "Lifebind" },
+    "Shield": { "zh": "光盾", "en": "Shield" },
+    "Moonstrike": { "zh": "月刃", "en": "Moonstrike" },
+    "Vanguard": { "zh": "重装", "en": "Vanguard" },
+    "Recovery": { "zh": "防盾", "en": "Recovery" },
+    "Dissonance": { "zh": "狂音", "en": "Dissonance" },
+    "Earthfort": { "zh": "岩盾", "en": "Earthfort" },
+    "Smite": { "zh": "惩戒", "en": "Smite" },
+    "Wildpack": { "zh": "狼弓", "en": "Wildpack" }
+  },
+  "skills": {
+    "wind_knight": {
+      "1420": { "zh": "风姿卓绝", "en": "Galeform" },
+      "1426": { "zh": "非举旗大招", "en": "Typhoon Cleave (No Battle Cry)" },
+      "1410": { "zh": "举旗大招", "en": "Typhoon Cleave" },
+      "1419": { "zh": "翔返", "en": "Skyfall" },
+      "1421": { "zh": "螺旋击刺", "en": "Spiral Thrust" },
+      "1422": { "zh": "破追", "en": "Breach Pursuit" },
+      "1425": { "zh": "飞鸟投", "en": "Falcon Toss (Leap)" },
+      "1424": { "zh": "刹那", "en": "Instant Edge" },
+      "1401": { "zh": "普攻", "en": "Windborne Grace" },
+      "1418": { "zh": "疾风刺", "en": "Gale Thrust" },
+      "1423": { "zh": "护佑之风", "en": "Aegis Gale" },
+      "1430": { "zh": "勇气风环", "en": "Valor Cyclone" },
+      "1431": { "zh": "锐利冲击", "en": "Sharp Impact (Crash Down)" },
+      "derivations": {
+        "1433": { "zh": "极·岚切", "en": "Azure Sever (Leap)" },
+        "1418_free": { "zh": "免费的疾空刺", "en": "Gale Thrust (Free)" },
+        "1434": { "zh": "神影螺旋", "en": "Vortex Strike" },
+        "1435": { "zh": "龙击炮", "en": "Drake Cannon" },
+        "1430_sustain": { "zh": "风环持续", "en": "Valor Cyclone (Sustain)" }
+      }
+    },
+    "frost_mage": {
+      "1239": { "zh": "陨星风暴", "en": "Meteor Storm" },
+      "1211": { "zh": "清滝绕珠", "en": "Crystal Veil" },
+      "1242": { "zh": "冰霜之矛", "en": "Frost Lance" },
+      "1210": { "zh": "水之涡流", "en": "Maelstrom" },
+      "1246": { "zh": "浪潮汇聚", "en": "Tidepool" },
+      "1245": { "zh": "寒冰庇护", "en": "Frost Shelter" },
+      "1243": { "zh": "冰之灌注", "en": "Permafrost" },
+      "1244": { "zh": "寒冰风暴", "en": "Blizzard" },
+      "1240": { "zh": "冻结寒风", "en": "Frozen Gale" },
+      "1248": { "zh": "极寒·冰雪颂歌", "en": "Glacier Hymn" },
+      "derivations": {
+        "1244_instant": { "zh": "免读条的寒冰风暴", "en": "Blizzard (Instant)" }
+      }
+    }
+  }
+}
