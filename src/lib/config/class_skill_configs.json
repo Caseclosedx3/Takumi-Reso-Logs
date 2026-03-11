@@ -587,5 +587,233 @@
         "imagePath": "/images/marksman/skill/weapon_gj-01_kx10_-8344665819022993474.png"
       }
     ]
+  },
+  "shield_knight": {
+    "classKey": "shield_knight",
+    "className": "Shield Knight",
+    "classId": 8,
+    "defaultMonitoredBuffIds": [510072, 3059180, 3059190, 2206240, 2206460],
+    "derivations": [
+      {
+        "sourceSkillId": 2410,
+        "derivedSkillId": 2451,
+        "triggerBuffBaseId": 2206241,
+        "derivedName": "Judgment (Holy Trigger)",
+        "derivedImagePath": "/images/shield_knight/skill/weapon_jd-01_kx03_-8196009838557995718.png"
+      },
+      {
+        "sourceSkillId": 2411,
+        "derivedSkillId": 2452,
+        "triggerBuffBaseId": 2206243,
+        "derivedName": "Scorching Judgment Sacred Blade",
+        "derivedImagePath": "/images/shield_knight/skill/weapon_jd-01_kx03_ex_-3283479109688026793.png"
+      },
+      {
+        "sourceSkillId": 2419,
+        "derivedSkillId": 55412,
+        "triggerBuffBaseId": 55412,
+        "derivedName": "Zeal Crusade (Ruthless Rewind)",
+        "derivedImagePath": "/images/shield_knight/skill/weapon_jd-01_kx07_-5986986059893844893.png"
+      },
+      {
+        "sourceSkillId": 2420,
+        "derivedSkillId": 55413,
+        "triggerBuffBaseId": 2206552,
+        "derivedName": "Radiance (Radiant Core)",
+        "derivedImagePath": "/images/shield_knight/skill/weapon_jd-01_kx08_-6219733669749337985.png"
+      }
+    ],
+    "skills": [
+      {
+        "skillId": 2401,
+        "name": "Blade of Justice",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_atk_-7599736398895457516.png"
+      },
+      {
+        "skillId": 2405,
+        "name": "Valor Bash",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_tg01_-3803901282891498152.png"
+      },
+      {
+        "skillId": 2406,
+        "name": "Vanguard Strike",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_tg02_4013186671524895553.png"
+      },
+      {
+        "skillId": 2408,
+        "name": "Shield Toss",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_kx01_2742719856316978574.png"
+      },
+      {
+        "skillId": 2409,
+        "name": "Divine Circle",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_kx02_-5832547282819026649.png"
+      },
+      {
+        "skillId": 2410,
+        "name": "Judgment",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_kx03_-8196009838557995718.png"
+      },
+      {
+        "skillId": 2411,
+        "name": "Scorching Judgment",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_kx03_ex_-3283479109688026793.png"
+      },
+      {
+        "skillId": 2412,
+        "name": "Reckoning",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_kx04_6813437494524289015.png"
+      },
+      {
+        "skillId": 2413,
+        "name": "Inferno Reckoning",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_kx04_ex_3897490832985626827.png"
+      },
+      {
+        "skillId": 2414,
+        "name": "Holy Barrier",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_kx05_-4289381580430547072.png"
+      },
+      {
+        "skillId": 2415,
+        "name": "Aegis Ward",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_kx06_8714268699010271690.png"
+      },
+      {
+        "skillId": 2419,
+        "name": "Zeal Crusade",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_kx07_-5986986059893844893.png"
+      },
+      {
+        "skillId": 2420,
+        "name": "Radiance",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_kx08_-6219733669749337985.png"
+      },
+      {
+        "skillId": 2421,
+        "name": "Sacred Blade",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_kx09_5660165481068977048.png"
+      },
+      {
+        "skillId": 2407,
+        "name": "Radiant Infusion",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_ult_01_-3013590265888688694.png"
+      },
+      {
+        "skillId": 2450,
+        "name": "Radiant Impact",
+        "imagePath": "/images/shield_knight/skill/weapon_jd-01_tg01_-3803901282891498152.png"
+      }
+    ]
+  },
+  "beat_performer": {
+    "classKey": "beat_performer",
+    "className": "Beat Performer",
+    "classId": 9,
+    "defaultMonitoredBuffIds": [510072, 55311, 2207141, 2207431, 2207681],
+    "derivations": [
+      {
+        "sourceSkillId": 2309,
+        "derivedSkillId": 230105,
+        "triggerBuffBaseId": 55341,
+        "derivedName": "Rhapsody of Flame (Flame's Rampage)",
+        "derivedImagePath": "/images/beat_performer/skill/weapon_jt-01_kx02_-2714308695985455060.png"
+      },
+      {
+        "sourceSkillId": 2314,
+        "derivedSkillId": 2335,
+        "triggerBuffBaseId": 55346,
+        "derivedName": "Infinite Rhapsody",
+        "derivedImagePath": "/images/beat_performer/skill/weapon_jt-01_ult01_-4234729619975768407.png"
+      },
+      {
+        "sourceSkillId": 2314,
+        "derivedSkillId": 2336,
+        "triggerBuffBaseId": 55346,
+        "derivedName": "Concert Circuit",
+        "derivedImagePath": "/images/beat_performer/skill/weapon_jt-01_ult02_6498082897660590521.png"
+      },
+      {
+        "sourceSkillId": 2311,
+        "derivedSkillId": 2318,
+        "triggerBuffBaseId": 55342,
+        "derivedName": "Finale! Healing Movement",
+        "derivedImagePath": "/images/beat_performer/skill/weapon_jt-01_kx04_01_6716438483618893459.png"
+      },
+      {
+        "sourceSkillId": 2310,
+        "derivedSkillId": 2317,
+        "triggerBuffBaseId": 55341,
+        "derivedName": "Fierce Strike",
+        "derivedImagePath": "/images/beat_performer/skill/weapon_jt-01_kx03_01_-8413956695779741461.png"
+      }
+    ],
+    "skills": [
+      {
+        "skillId": 2301,
+        "name": "Resonant Strings",
+        "imagePath": "/images/beat_performer/skill/weapon_jt-01_atk_-6343875983135015440.png"
+      },
+      {
+        "skillId": 2306,
+        "name": "Amplified Beat",
+        "imagePath": "/images/beat_performer/skill/weapon_jt-01_tg01_5746052617459614699.png"
+      },
+      {
+        "skillId": 55302,
+        "name": "Healing Beat",
+        "imagePath": "/images/beat_performer/skill/weapon_jt-01_tg02_8812916416614975647.png"
+      },
+      {
+        "skillId": 2309,
+        "name": "Rhapsody of Flame",
+        "imagePath": "/images/beat_performer/skill/weapon_jt-01_kx02_-2714308695985455060.png"
+      },
+      {
+        "skillId": 2310,
+        "name": "Heroic Melody",
+        "imagePath": "/images/beat_performer/skill/weapon_jt-01_kx03_-5977427861316810534.png"
+      },
+      {
+        "skillId": 2311,
+        "name": "Healing Melody",
+        "imagePath": "/images/beat_performer/skill/weapon_jt-01_kx04_-8234197979524843668.png"
+      },
+      {
+        "skillId": 2312,
+        "name": "Fivefold Crescendo",
+        "imagePath": "/images/beat_performer/skill/weapon_jt-01_kx05_-2218786001791299027.png"
+      },
+      {
+        "skillId": 2313,
+        "name": "Passion Burst",
+        "imagePath": "/images/beat_performer/skill/weapon_jt-01_kx06_-6476960855791010985.png"
+      },
+      {
+        "skillId": 2314,
+        "name": "Rock the Stage",
+        "imagePath": "/images/beat_performer/skill/weapon_jt-01_ult_2617564397027534820.png"
+      },
+      {
+        "skillId": 2315,
+        "name": "Encore",
+        "imagePath": "/images/beat_performer/skill/weapon_jt-01_kx07_-5417739428879370128.png"
+      },
+      {
+        "skillId": 2316,
+        "name": "Center Stage",
+        "imagePath": "/images/beat_performer/skill/weapon_jt-01_kx08_5196248148175781543.png"
+      },
+      {
+        "skillId": 2332,
+        "name": "Passion Fury",
+        "imagePath": "/images/beat_performer/skill/weapon_jt-01_tf03_01_-4743533657476291012.png"
+      },
+      {
+        "skillId": 2319,
+        "name": "Sound Wave Surge",
+        "imagePath": "/images/beat_performer/skill/weapon_jt-01_skill_passive_-7001680397286929315.png"
+      }
+    ]
   }
 }
