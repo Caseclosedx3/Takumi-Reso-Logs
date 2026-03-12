@@ -86,6 +86,43 @@ fn apply_sqlite_pragmas(conn: &mut SqliteConnection) {
     let _ = diesel::sql_query("PRAGMA foreign_keys=ON;").execute(conn);
 }
 
+/// Defensive schema guards run after migrations.
+/// These are intentionally idempotent — SQLite will error if a column already
+/// exists, but we discard that error with `let _ =`. This ensures users
+/// upgrading from any prior build always have all required columns/tables,
+/// even if their migration history is incomplete or corrupt.
+fn apply_schema_guards(conn: &mut SqliteConnection) {
+    // Guard: encounter_data table (Bug fix: v0.0.7 'no such table' crash)
+    let _ = diesel::sql_query(
+        "CREATE TABLE IF NOT EXISTS encounter_data (
+            encounter_id INTEGER PRIMARY KEY NOT NULL,
+            data BLOB NOT NULL,
+            FOREIGN KEY(encounter_id) REFERENCES encounters(id) ON DELETE CASCADE
+        );",
+    )
+    .execute(conn);
+
+    // Guard: boss_names column (Bug fix: v0.0.6 'no such column: boss_names')
+    let _ = diesel::sql_query(
+        "ALTER TABLE encounters ADD COLUMN boss_names TEXT;",
+    )
+    .execute(conn);
+
+    // Guard: player_names column (Bug fix: v0.0.6 'no such column: player_names')
+    let _ = diesel::sql_query(
+        "ALTER TABLE encounters ADD COLUMN player_names TEXT;",
+    )
+    .execute(conn);
+
+    // Guard: active_combat_duration column (added in 2026-03-07 migration)
+    let _ = diesel::sql_query(
+        "ALTER TABLE encounters ADD COLUMN active_combat_duration REAL;",
+    )
+    .execute(conn);
+
+    log::info!(target: "app::db", "schema_guards_applied");
+}
+
 fn db_thread_main(mut conn: SqliteConnection, rx: mpsc::Receiver<DbTask>) {
     while let Ok(task) = rx.recv() {
         task(&mut conn);
@@ -145,6 +182,11 @@ pub fn init_db() -> Result<(), DbInitError> {
 
     conn.run_pending_migrations(MIGRATIONS)
         .map_err(|e| DbInitError::Migration(e.to_string()))?;
+
+    // Apply defensive schema guards AFTER migrations to handle users whose
+    // migration history is incomplete, corrupt, or from an older build that
+    // predates these columns/tables.
+    apply_schema_guards(&mut conn);
 
     let (tx, rx) = mpsc::channel::<DbTask>();
     std::thread::Builder::new()
