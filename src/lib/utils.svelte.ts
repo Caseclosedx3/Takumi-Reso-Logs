@@ -43,7 +43,19 @@ export function getClassIcon(class_name: string): string {
   if (class_name === "") {
     return "/images/classes/blank.png";
   }
-  return "/images/classes/" + class_name + ".png";
+  // encodeURIComponent converts spaces to %20, which WebView2 requires
+  // for static asset paths that contain spaces (e.g. "Wind Knight.png").
+  return "/images/classes/" + encodeURIComponent(class_name) + ".png";
+}
+
+/** Fallback handler for class icon <img> elements.
+ *  Swaps a broken image to blank.png so the UI never shows a broken-image glyph.
+ */
+export function onClassIconError(event: Event): void {
+  const img = event.currentTarget as HTMLImageElement;
+  if (!img.src.endsWith("blank.png")) {
+    img.src = "/images/classes/blank.png";
+  }
 }
 
 // https://svelte.dev/docs/svelte/@attach#Attachment-factories
