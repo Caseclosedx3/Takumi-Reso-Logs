@@ -9,6 +9,7 @@
 	} from "$lib/bindings";
 	import UnifiedSearch from "$lib/components/unified-search.svelte";
 	import { CLASS_MAP, getClassIcon, tooltip } from "$lib/utils.svelte";
+	import { toBossName } from "$lib/class-labels";
 
 	let encounters = $state<EncounterSummaryDto[]>([]);
 	let errorMsg = $state<string | null>(null);
@@ -591,8 +592,8 @@
 										<div class="flex flex-wrap gap-1">
 											<span
 												class="text-xs py-0.5 rounded px-1.5"
-												>{enc.bosses[0]
-													?.monsterName}</span
+												>{toBossName(enc.bosses[0]
+													?.monsterName ?? "")}</span
 											>
 										</div>
 									{:else}
