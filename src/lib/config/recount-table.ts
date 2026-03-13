@@ -60,6 +60,10 @@ for (const entry of Object.values(recountTable)) {
   }
 }
 
+function hasCJK(str: string): boolean {
+  return /[\u4e00-\u9fff\u3400-\u4dbf]/.test(str);
+}
+
 function pct(numerator: number, denominator: number): number {
   if (denominator <= 0) return 0;
   return (numerator / denominator) * 100;
@@ -83,8 +87,13 @@ export function lookupDamageIdName(damageId: number): string {
 
 export function lookupChildDamageIdName(damageId: number): string {
   const individual = damageAttrIdNames[String(damageId)];
-  if (individual) return individual;
-  return lookupDamageIdName(damageId);
+  // If the name exists and is clean English, use it directly
+  if (individual && !hasCJK(individual)) return individual;
+  // Fall back to parent recount name (always EN from RecountTable.json)
+  const recount = DAMAGE_TO_RECOUNT.get(damageId);
+  if (recount) return recount.recountName;
+  // Last resort: numeric ID tag (avoids showing raw Chinese)
+  return `#${damageId}`;
 }
 
 export function buildSkillDisplayRow(
