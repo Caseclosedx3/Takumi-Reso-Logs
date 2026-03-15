@@ -3,7 +3,16 @@
     "classKey": "wind_knight",
     "className": "Wind Knight",
     "classId": 4,
-    "defaultMonitoredBuffIds": [510072, 2205561, 31201, 2205211, 2205401, 2205134, 2205521, 31901],
+    "defaultMonitoredBuffIds": [
+      510072,
+      2205561,
+      31201,
+      2205211,
+      2205401,
+      2205134,
+      2205521,
+      31901
+    ],
     "derivations": [
       {
         "sourceSkillId": 1425,
@@ -16,7 +25,7 @@
         "sourceSkillId": 1418,
         "derivedSkillId": 1418,
         "triggerBuffBaseId": 2205401,
-        "derivedName": "Gale Thrust (Free)",
+        "derivedName": "Gale Thrust",
         "derivedImagePath": "/images/wind_knight/skill/weapon_cq-01_tg01_-2586550948717895893.png"
       },
       {
@@ -37,7 +46,7 @@
         "sourceSkillId": 1430,
         "derivedSkillId": 1430,
         "triggerBuffBaseId": 31901,
-        "derivedName": "Valor Cyclone (Sustain)",
+        "derivedName": "Valor Cyclone",
         "derivedImagePath": "/images/wind_knight/skill/weapon_cq_skill_passive_-4587170372366891142.png"
       }
     ],
@@ -55,14 +64,17 @@
       },
       {
         "skillId": 1410,
-        "name": "Typhoon Cleave (Battle Cry Leap)",
+        "name": "Typhoon Cleave",
         "imagePath": "/images/wind_knight/skill/weapon_cq-01_ult_02_-7515185664632347258.png"
       },
       {
         "skillId": 1419,
         "name": "Skyfall",
         "imagePath": "/images/wind_knight/skill/weapon_cq-01_tg02_-133786615417471994.png",
-        "resourceRequirement": { "resourceIndex": 4, "amount": 35 }
+        "resourceRequirement": {
+          "resourceIndex": 4,
+          "amount": 35
+        }
       },
       {
         "skillId": 1421,
@@ -84,11 +96,14 @@
         "skillId": 1424,
         "name": "Instant Edge",
         "imagePath": "/images/wind_knight/skill/weapon_cq-01_kx05_-4769613798753072914.png",
-        "resourceRequirement": { "resourceIndex": 6, "amount": 3 }
+        "resourceRequirement": {
+          "resourceIndex": 6,
+          "amount": 3
+        }
       },
       {
         "skillId": 1401,
-        "name": "Windborne Grace",
+        "name": "Windborne Grace - Sweep",
         "imagePath": "/images/wind_knight/skill/weapon_cq_skill_atk_-7208739400043910585.png"
       },
       {
@@ -118,13 +133,17 @@
     "classKey": "frost_mage",
     "className": "Frost Mage",
     "classId": 2,
-    "defaultMonitoredBuffIds": [510072, 27007, 2204191],
+    "defaultMonitoredBuffIds": [
+      510072,
+      27007,
+      2204191
+    ],
     "derivations": [
       {
         "sourceSkillId": 1244,
         "derivedSkillId": 1244,
         "triggerBuffBaseId": 2204191,
-        "derivedName": "Blizzard (Instant)",
+        "derivedName": "Blizzard",
         "derivedImagePath": "/images/frost_mage/skill/weapon_mz-01_kx03_-5346524802378145274.png",
         "keepCdWhenDerived": true
       }
@@ -188,13 +207,15 @@
     "classKey": "stormblade",
     "className": "Stormblade",
     "classId": 6,
-    "defaultMonitoredBuffIds": [510072],
+    "defaultMonitoredBuffIds": [
+      510072
+    ],
     "derivations": [
       {
         "sourceSkillId": 1731,
         "derivedSkillId": 1732,
         "triggerBuffBaseId": 43201,
-        "derivedName": "Stormflash (Derived)",
+        "derivedName": "Stormflash",
         "derivedImagePath": "/images/stormblade/skill/weapon_tdl-01_kx08_1310086718716380591.png"
       },
       {
@@ -208,21 +229,21 @@
         "sourceSkillId": 1736,
         "derivedSkillId": 1736,
         "triggerBuffBaseId": 179907,
-        "derivedName": "Phantom Slash (Bladewind)",
+        "derivedName": "Phantom Slash",
         "derivedImagePath": "/images/stormblade/skill/weapon_tdl-01_tf04_2216604320468850874.png"
       },
       {
         "sourceSkillId": 1714,
         "derivedSkillId": 1714,
         "triggerBuffBaseId": 155101,
-        "derivedName": "Thunder Cut",
+        "derivedName": "Iaido Slash",
         "derivedImagePath": "/images/stormblade/skill/weapon_tdl-01_tf05_6590570411655847853.png"
       }
     ],
     "skills": [
       {
         "skillId": 1701,
-        "name": "Judgment Cut",
+        "name": "Judgment Cut - Stage 1",
         "imagePath": "/images/stormblade/skill/weapon_tdl-01_skill_atk01_-4614215089673209881.png"
       },
       {
@@ -237,7 +258,7 @@
       },
       {
         "skillId": 1724,
-        "name": "Thundercut",
+        "name": "Thundercut - Stage 1",
         "imagePath": "/images/stormblade/skill/weapon_tdl-01_kx06_-1183548700792331979.png"
       },
       {
@@ -286,7 +307,9 @@
     "classKey": "verdant_oracle",
     "className": "Verdant Oracle",
     "classId": 5,
-    "defaultMonitoredBuffIds": [510072],
+    "defaultMonitoredBuffIds": [
+      510072
+    ],
     "derivations": [
       {
         "sourceSkillId": 1518,
@@ -306,7 +329,7 @@
     "skills": [
       {
         "skillId": 1501,
-        "name": "Vines' Embrace",
+        "name": "Vines' Embrace - Stage 1",
         "imagePath": "/images/verdant_oracle/skill/weapon_fh_skill_atk_7207613408057060099.png"
       },
       {
@@ -361,37 +384,37 @@
       },
       {
         "skillId": 1560,
-        "name": "Regen Pulse (Pulse Retrospect)",
+        "name": "Regen Pulse",
         "imagePath": "/images/verdant_oracle/skill/weapon_fh-01_kx05_-6309963487019551284.png"
       },
       {
         "skillId": 1506,
-        "name": "Thorn Volley",
+        "name": "Bloom",
         "imagePath": "/images/verdant_oracle/skill/weapon_fh-01_kx06_-5972192814303085887.png"
       },
       {
         "skillId": 1508,
-        "name": "Vine Snare",
+        "name": "场地标记01",
         "imagePath": "/images/verdant_oracle/skill/weapon_fh-01_kx07_-6626360985139412137.png"
       },
       {
         "skillId": 1516,
-        "name": "Nature Shield",
+        "name": "场地标记01",
         "imagePath": "/images/verdant_oracle/skill/weapon_fh-01_kx08_-5368673168487156305.png"
       },
       {
         "skillId": 1513,
-        "name": "Tidal Flow",
+        "name": "场地标记01",
         "imagePath": "/images/verdant_oracle/skill/weapon_fh-01_tg02_-6034095740534119129.png"
       },
       {
         "skillId": 1507,
-        "name": "Overgrowth",
+        "name": "Life Bloom",
         "imagePath": "/images/verdant_oracle/skill/weapon_fh-01_ult_01_-1160782108471453102.png"
       },
       {
         "skillId": 1510,
-        "name": "Grove Hymn",
+        "name": "场地标记01",
         "imagePath": "/images/verdant_oracle/skill/weapon_fh-01_ult03_-922524136805580252.png"
       }
     ]
@@ -400,7 +423,13 @@
     "classKey": "heavy_guardian",
     "className": "Heavy Guardian",
     "classId": 3,
-    "defaultMonitoredBuffIds": [510072, 50042, 50057, 50058, 2201570],
+    "defaultMonitoredBuffIds": [
+      510072,
+      50042,
+      50057,
+      50058,
+      2201570
+    ],
     "derivations": [
       {
         "sourceSkillId": 1901,
@@ -427,7 +456,7 @@
     "skills": [
       {
         "skillId": 1901,
-        "name": "Halberd's Edge",
+        "name": "Halberd's Edge - Stage 1 / Granite",
         "imagePath": "/images/heavy_guardian/skill/weapon_wr_skill_atk_5193386965498625783.png"
       },
       {
@@ -447,7 +476,7 @@
       },
       {
         "skillId": 50049,
-        "name": "Sandshroud",
+        "name": "Sandshroud (Persistent)",
         "imagePath": "/images/heavy_guardian/skill/weapon_wr-01_kx02_-1640085009780895989.png"
       },
       {
@@ -496,20 +525,24 @@
     "classKey": "marksman",
     "className": "Marksman",
     "classId": 7,
-    "defaultMonitoredBuffIds": [510072, 55223, 55221],
+    "defaultMonitoredBuffIds": [
+      510072,
+      55223,
+      55221
+    ],
     "derivations": [
       {
         "sourceSkillId": 220104,
         "derivedSkillId": 220104,
         "triggerBuffBaseId": 55223,
-        "derivedName": "Storm Arrow (Focused)",
+        "derivedName": "Storm Arrow",
         "derivedImagePath": "/images/marksman/skill/weapon_gj-01_tg01_-9176826413636765268.png"
       },
       {
         "sourceSkillId": 2289,
         "derivedSkillId": 2289,
         "triggerBuffBaseId": 55221,
-        "derivedName": "Arrow Rain (Photon Regorge)",
+        "derivedName": "Arrow Rain",
         "derivedImagePath": "/images/marksman/skill/weapon_gj-01_kx03_-8553116083918476491.png"
       },
       {
@@ -538,7 +571,7 @@
       },
       {
         "skillId": 220111,
-        "name": "Photon Reforge - Quadraflare",
+        "name": "Photon Refroge - Quadraflare",
         "imagePath": "/images/marksman/skill/weapon_gj-01_tg03_-1621706960820127248.png"
       },
       {
@@ -592,7 +625,13 @@
     "classKey": "shield_knight",
     "className": "Shield Knight",
     "classId": 8,
-    "defaultMonitoredBuffIds": [510072, 3059180, 3059190, 2206240, 2206460],
+    "defaultMonitoredBuffIds": [
+      510072,
+      3059180,
+      3059190,
+      2206240,
+      2206460
+    ],
     "derivations": [
       {
         "sourceSkillId": 2410,
@@ -619,14 +658,14 @@
         "sourceSkillId": 2420,
         "derivedSkillId": 55413,
         "triggerBuffBaseId": 2206552,
-        "derivedName": "Radiance (Radiant Core)",
+        "derivedName": "Radiance",
         "derivedImagePath": "/images/shield_knight/skill/weapon_jd-01_kx08_-6219733669749337985.png"
       }
     ],
     "skills": [
       {
         "skillId": 2401,
-        "name": "Blade of Justice",
+        "name": "Blade of Justice - Stage 1",
         "imagePath": "/images/shield_knight/skill/weapon_jd-01_atk_-7599736398895457516.png"
       },
       {
@@ -636,7 +675,7 @@
       },
       {
         "skillId": 2406,
-        "name": "Vanguard Strike",
+        "name": "Vanguard Strike/Vanguard Hunt",
         "imagePath": "/images/shield_knight/skill/weapon_jd-01_tg02_4013186671524895553.png"
       },
       {
@@ -710,13 +749,19 @@
     "classKey": "beat_performer",
     "className": "Beat Performer",
     "classId": 9,
-    "defaultMonitoredBuffIds": [510072, 55311, 2207141, 2207431, 2207681],
+    "defaultMonitoredBuffIds": [
+      510072,
+      55311,
+      2207141,
+      2207431,
+      2207681
+    ],
     "derivations": [
       {
         "sourceSkillId": 2309,
         "derivedSkillId": 230105,
         "triggerBuffBaseId": 55341,
-        "derivedName": "Rhapsody of Flame (Flame's Rampage)",
+        "derivedName": "Rhapsody of Flame - Flame's Rampage",
         "derivedImagePath": "/images/beat_performer/skill/weapon_jt-01_kx02_-2714308695985455060.png"
       },
       {
@@ -751,7 +796,7 @@
     "skills": [
       {
         "skillId": 2301,
-        "name": "Resonant Strings",
+        "name": "Resonant Strings - Stage 1",
         "imagePath": "/images/beat_performer/skill/weapon_jt-01_atk_-6343875983135015440.png"
       },
       {
