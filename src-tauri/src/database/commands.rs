@@ -650,6 +650,7 @@ pub fn get_encounter_entities_raw(encounter_id: i32) -> Result<Vec<lc::HistoryEn
             class_spec_name: class::get_class_spec(entity.class_spec),
             ability_score: entity.ability_score,
             season_strength: entity.season_strength,
+            active_combat_time_ms: entity.damage_active_time_ms,
             damage: lc::to_raw_combat_stats(&entity.damage),
             damage_boss_only: lc::to_raw_combat_stats(&entity.damage_boss_only),
             healing: lc::to_raw_combat_stats(&entity.healing),

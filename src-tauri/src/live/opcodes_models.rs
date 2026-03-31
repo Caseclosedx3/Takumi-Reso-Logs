@@ -360,6 +360,10 @@ pub struct Entity {
     pub skill_dmg_to_target: HashMap<(i64, i64), SkillTargetStats>,
     pub skill_heal_to_target: HashMap<(i64, i64), SkillTargetStats>,
     pub season_strength: i32,
+    #[serde(default)]
+    pub damage_active_time_ms: u128,
+    #[serde(default)]
+    pub last_damage_timestamp_ms: Option<u128>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -443,6 +447,8 @@ impl Encounter {
             // Taken
             entity.taken = CombatStats::default();
             entity.skill_uid_to_taken_skill.clear();
+            entity.damage_active_time_ms = 0;
+            entity.last_damage_timestamp_ms = None;
         }
         // Clear any pending player death tracking for a fresh encounter
         self.pending_player_revives.clear();

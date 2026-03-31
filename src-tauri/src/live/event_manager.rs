@@ -322,6 +322,7 @@ pub fn generate_live_data_payload(
                 .attr(uid, AttrType::SeasonStrength)
                 .and_then(|value| value.as_int())
                 .map_or(0, |value| value as i32),
+            active_combat_time_ms: entity.damage_active_time_ms.min(elapsed_ms),
             damage: to_raw_combat_stats(&entity.damage),
             damage_boss_only: to_raw_combat_stats(&entity.damage_boss_only),
             healing: to_raw_combat_stats(&entity.healing),

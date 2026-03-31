@@ -141,25 +141,27 @@ fn record_revive(encounter: &mut Encounter, actor_id: i64, timestamp_ms: i64) {
     info!("Recorded revive for UID {}", actor_id);
 }
 
-/// Increment global active combat time used for True DPS calculations.
-/// Adds a small grace window for single hits and ignores long idle gaps.
+/// Increment global active combat time used for encounter-level active timers.
+/// Caps long idle gaps so only actively engaged intervals are counted.
 fn update_active_damage_time(encounter: &mut Encounter, timestamp_ms: u128) {
-    const INACTIVITY_CUTOFF_MS: u128 = 3_000;
-    const HIT_GRACE_MS: u128 = 500;
-
-    let additional = if let Some(last) = encounter.last_combat_timestamp_ms {
+    const ACTIVE_GAP_CAP_MS: u128 = 10_000;
+    if let Some(last) = encounter.last_combat_timestamp_ms {
         let delta = timestamp_ms.saturating_sub(last);
-        if delta <= INACTIVITY_CUTOFF_MS {
-            delta
-        } else {
-            HIT_GRACE_MS
-        }
-    } else {
-        HIT_GRACE_MS
-    };
-
-    encounter.active_combat_time_ms = encounter.active_combat_time_ms.saturating_add(additional);
+        let additional = delta.min(ACTIVE_GAP_CAP_MS);
+        encounter.active_combat_time_ms = encounter.active_combat_time_ms.saturating_add(additional);
+    }
     encounter.last_combat_timestamp_ms = Some(timestamp_ms);
+}
+
+/// Increment per-entity active damage time for ZDPS-style TDPS parity.
+fn update_entity_active_damage_time(entity: &mut Entity, timestamp_ms: u128) {
+    const ACTIVE_GAP_CAP_MS: u128 = 10_000;
+    if let Some(last) = entity.last_damage_timestamp_ms {
+        let delta = timestamp_ms.saturating_sub(last);
+        let additional = delta.min(ACTIVE_GAP_CAP_MS);
+        entity.damage_active_time_ms = entity.damage_active_time_ms.saturating_add(additional);
+    }
+    entity.last_damage_timestamp_ms = Some(timestamp_ms);
 }
 
 fn did_target_die(
@@ -822,6 +824,9 @@ pub fn process_aoi_sync_delta(
                 attacker_entity.damage.total += actual_value;
                 skill.hits += 1;
                 skill.total_value += actual_value;
+                if attacker_entity.entity_type == EEntityType::EntChar {
+                    update_entity_active_damage_time(attacker_entity, timestamp_ms);
+                }
 
                 if is_boss_target {
                     if is_crit_local {

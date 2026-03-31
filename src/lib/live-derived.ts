@@ -40,9 +40,6 @@ export function computePlayerRowsFromEntities(
   metric: Metric,
 ): PlayerRow[] {
   const elapsedSecs = source.elapsedMs > 0 ? source.elapsedMs / 1000 : 0;
-  const effectiveActiveCombatMs = Math.min(source.activeCombatTimeMs, source.elapsedMs);
-  const activeCombatSecs =
-    effectiveActiveCombatMs > 0 ? effectiveActiveCombatMs / 1000 : 0;
   const totalMetric =
     metric === "heal"
       ? source.totalHeal
@@ -57,6 +54,20 @@ export function computePlayerRowsFromEntities(
       const hits = Number(stats.hits || 0);
       const bossDmg = metric === "dps" ? Number(entity.damageBossOnly?.total || 0) : 0;
       const bossTotal = Number(source.totalDmgBossOnly || 0);
+      const entityActiveMs =
+        metric === "dps"
+          ? Math.min(
+              Math.max(0, Number((entity as { activeCombatTimeMs?: number }).activeCombatTimeMs ?? 0)),
+              source.elapsedMs,
+            )
+          : 0;
+      const entityActiveSecs = entityActiveMs > 0 ? entityActiveMs / 1000 : 0;
+      const tdpsValue =
+        metric === "dps"
+          ? entityActiveSecs >= 1
+            ? total / entityActiveSecs
+            : total
+          : 0;
 
       const row: PlayerRow = {
         uid: entity.uid,
@@ -67,8 +78,8 @@ export function computePlayerRowsFromEntities(
         seasonStrength: entity.seasonStrength ?? 0,
         totalDmg: total,
         dps: elapsedSecs > 0 ? total / elapsedSecs : 0,
-        tdps: metric === "dps" && activeCombatSecs > 0 ? total / activeCombatSecs : 0,
-        activeTimeMs: metric === "dps" ? effectiveActiveCombatMs : 0,
+        tdps: tdpsValue,
+        activeTimeMs: entityActiveMs,
         bossDps: metric === "dps" && elapsedSecs > 0 ? bossDmg / elapsedSecs : 0,
         dmgPct: percent(total, totalMetric),
         critRate: rate(Number(stats.critHits || 0), hits),
